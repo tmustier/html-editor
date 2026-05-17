@@ -40,7 +40,8 @@ you deliberately want broadcast-style legacy behaviour.
 - `main.js` boot entrypoint (initDom, initEvents, initSidebarButtons, initRuntime)
 - `state.js` shared mutable state singleton
 - `config.js` icon SVGs, endpoint URLs, inline-text tag set
-- `api.js` fetch wrappers for every server endpoint + `reloadAfterMutation`
+- `api.js` fetch wrappers for every server endpoint
+- `interaction.js` click-lock and reload timing helpers
 - `dom.js` builds the overlay DOM, exposes `dom.*` element refs, `icon()`, `flash()`
 - `targets.js` semantic target model + DOM walks + breadcrumb + placement
 - `events.js` mouse/keyboard/toolbar wiring + `selectElement`/`deselect`/`performHistory`

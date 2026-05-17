@@ -9,6 +9,4 @@ export const state = {
   editing: false,            // true while an inline HTML or SVG edit is active
   svgEditing: null,          // SVG edit session object, or null
   dragging: null,            // drag session object (reorder / svg / resize) or null
-  suppressClickUntil: 0,     // Date.now() until which clicks should be ignored
-                             // (used to guard against synthetic click after drag/resize)
 };

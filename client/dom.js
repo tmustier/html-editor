@@ -120,12 +120,14 @@ export function initDom() {
   });
 }
 
+const FLASH_KINDS = new Set(["info", "success", "warning", "error"]);
 let flashTimer = 0;
-export function flash(msg) {
+export function flash(msg, { kind = "info", timeout = 2200 } = {}) {
   dom.status.textContent = msg;
+  dom.status.dataset.kind = FLASH_KINDS.has(kind) ? kind : "info";
   dom.status.style.opacity = "1";
   clearTimeout(flashTimer);
-  flashTimer = setTimeout(() => { dom.status.style.opacity = "0"; }, 2200);
+  flashTimer = setTimeout(() => { dom.status.style.opacity = "0"; }, timeout);
 }
 
 export function isOverlay(el) {

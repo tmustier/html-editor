@@ -9,8 +9,9 @@
 // server preserves <tspan> formatting on single-segment edits; on success we
 // reload to pick up the file's authoritative formatting.
 
-import { api, reloadAfterMutation } from "./api.js";
+import { api } from "./api.js";
 import { dom, flash } from "./dom.js";
+import { reloadAfterMutation } from "./interaction.js";
 import { state } from "./state.js";
 import {
   currentTarget,
@@ -37,7 +38,8 @@ export function startEdit(preferredSource, clickX, clickY) {
     const child = firstEditableChild(el);
     flash(child
       ? "Structural component selected. Use Option+Down or click text inside it to edit."
-      : "Structural component selected. Drag to move it; select text inside it to edit.");
+      : "Structural component selected. Drag to move it; select text inside it to edit.",
+      { kind: "info" });
     placeToolbar(el);
     return;
   }
@@ -83,11 +85,11 @@ function startHtmlTextEdit(el, clickX, clickY) {
       const html = hadChildren ? el.innerHTML : undefined;
       try {
         await api.saveText(id, text, html);
-        flash("Saved.");
+        flash("Saved.", { kind: "success" });
         el.classList.add("__edit_pulse");
         setTimeout(() => el.classList.remove("__edit_pulse"), 700);
       } catch (err) {
-        flash("Save failed: " + err.message);
+        flash("Save failed: " + err.message, { kind: "error" });
       }
     }
     placeBox(dom.selectBox, el);
@@ -227,7 +229,7 @@ function startSvgLabelEdit(preferredSource, clickX, clickY) {
   if (!state.selected || state.svgEditing) return;
   const target = currentTarget();
   if (!(target && (target.kind === "svg-item" || target.kind === "svg-text") && target.canEditText)) {
-    flash("Select a labelled diagram item or text to edit.");
+    flash("Select a labelled diagram item or text to edit.", { kind: "warning" });
     return;
   }
   const el = state.selected;
@@ -331,9 +333,9 @@ export async function finishSvgLabelEdit(commit) {
   try {
     const j = await api.saveSvgLabels(s.id, lines);
     if (j.formatting_lost) {
-      flash("Saved — but inline formatting was lost (edit crossed a styled span).");
+      flash("Saved — but inline formatting was lost (edit crossed a styled span).", { kind: "warning" });
     } else {
-      flash("Saved diagram label.");
+      flash("Saved diagram label.", { kind: "success" });
     }
     s.el.classList.add("__edit_pulse");
     setTimeout(() => s.el.classList.remove("__edit_pulse"), 700);
@@ -347,7 +349,7 @@ export async function finishSvgLabelEdit(commit) {
     }
   } catch (err) {
     restore();
-    flash("Save failed: " + err.message);
+    flash("Save failed: " + err.message, { kind: "error" });
     selectElementInternal(s.el);
   }
 }

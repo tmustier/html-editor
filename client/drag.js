@@ -8,6 +8,7 @@
 
 import { api } from "./api.js";
 import { dom, flash, isOverlay, rectOf } from "./dom.js";
+import { interactionLock } from "./interaction.js";
 import { state } from "./state.js";
 import {
   currentTarget,
@@ -79,7 +80,7 @@ async function onResizeEnd(e) {
   if (!state.dragging || state.dragging.mode !== "resize") return;
   e.preventDefault();
   e.stopPropagation();
-  state.suppressClickUntil = Date.now() + RESIZE_END_CLICK_SUPPRESS_MS;
+  interactionLock.lockClicksFor(RESIZE_END_CLICK_SUPPRESS_MS);
   const {
     el, direction,
     originalInlineWidth, originalInlineHeight,
@@ -115,12 +116,12 @@ async function onResizeEnd(e) {
   if (usedH) { body.height = finalH; body.max_height = "none"; }
   try {
     await api.resizeElement(el.getAttribute("data-edit-id"), body);
-    flash("Resized.");
+    flash("Resized.", { kind: "success" });
     el.classList.add("__edit_pulse");
     setTimeout(() => el.classList.remove("__edit_pulse"), 700);
   } catch (err) {
     restore();
-    flash("Resize failed: " + err.message);
+    flash("Resize failed: " + err.message, { kind: "error" });
   }
   selectElementInternal(el);
 }
@@ -190,7 +191,7 @@ export function beginDrag(e) {
   if (!state.selected || state.editing || state.dragging) return;
   const target = currentTarget();
   if (!target || !target.canMove) {
-    flash("This selected item cannot be moved directly.");
+    flash("This selected item cannot be moved directly.", { kind: "warning" });
     return;
   }
   if (target.moveMode === "spatial") return beginSvgDrag(e);
@@ -313,10 +314,10 @@ async function onSvgDragEnd(e) {
 
   try {
     await api.moveSvg(id, current.x, current.y);
-    flash("Repositioned.");
+    flash("Repositioned.", { kind: "success" });
   } catch (err) {
     el.setAttribute("transform", originalTransform || "");
-    flash("Move failed: " + err.message);
+    flash("Move failed: " + err.message, { kind: "error" });
   }
   selectElementInternal(el);
 }
@@ -333,7 +334,7 @@ async function onDragEnd(e) {
   cleanupDragListeners();
 
   if (!drop || !drop.el) {
-    flash("Move cancelled: drop on another component.");
+    flash("Move cancelled: drop on another component.", { kind: "warning" });
     if (el && document.contains(el)) selectElementInternal(el);
     return;
   }
@@ -344,9 +345,9 @@ async function onDragEnd(e) {
     else drop.el.parentNode.insertBefore(el, drop.el.nextSibling);
     selectElementInternal(el);
     loadComments();
-    flash("Moved.");
+    flash("Moved.", { kind: "success" });
   } catch (err) {
-    flash("Move failed: " + err.message);
+    flash("Move failed: " + err.message, { kind: "error" });
     if (el && document.contains(el)) selectElementInternal(el);
   }
 }

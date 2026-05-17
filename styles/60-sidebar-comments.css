@@ -9,11 +9,14 @@
   border-radius: 999px;
   font-size: 12px;
   opacity: 0;
-  transition: opacity 0.25s ease;
+  transition: opacity 0.25s ease, background-color 0.2s ease;
   z-index: 2147483646;
   pointer-events: none;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
 }
+#__edit_status[data-kind="success"] { background: #166534; }
+#__edit_status[data-kind="warning"] { background: #92400e; }
+#__edit_status[data-kind="error"] { background: #991b1b; }
 
 #__edit_sidebar {
   position: fixed;

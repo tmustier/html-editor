@@ -1,8 +1,9 @@
 // Wire mouse, keyboard, and toolbar events. Lives at the top of the
 // dependency tree because everything else exports the handlers it calls.
 
-import { api, reloadAfterMutation } from "./api.js";
+import { api } from "./api.js";
 import { dom, flash, isOverlay } from "./dom.js";
+import { interactionLock, reloadAfterMutation } from "./interaction.js";
 import { sendComment, startComment } from "./comments.js";
 import { beginDrag, beginResize, cancelDrag } from "./drag.js";
 import { finishSvgLabelEdit, startEdit } from "./editing.js";
@@ -35,11 +36,12 @@ async function performHistory(action) {
   try {
     if (action === "undo") await api.undo();
     else await api.redo();
-    flash(action === "undo" ? "Undone." : "Redone.");
+    flash(action === "undo" ? "Undone." : "Redone.", { kind: "success" });
     reloadAfterMutation({ delay: 120 });
   } catch (err) {
     flash(err.message
-      || (action === "undo" ? "Nothing to undo." : "Nothing to redo."));
+      || (action === "undo" ? "Nothing to undo." : "Nothing to redo."),
+      { kind: "warning" });
   }
 }
 
@@ -70,7 +72,7 @@ export function initEvents() {
   // Capture-phase click selects (and edits text-editables in one go).
   // Structural HTML containers and SVG group backgrounds just select.
   document.addEventListener("click", (e) => {
-    if (Date.now() < state.suppressClickUntil) {
+    if (interactionLock.clicksLocked()) {
       e.preventDefault();
       e.stopPropagation();
       return;

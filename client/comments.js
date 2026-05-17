@@ -26,7 +26,7 @@ export function startComment() {
 export async function sendComment() {
   if (!state.selected) return;
   const text = dom.commentTA.value.trim();
-  if (!text) { flash("Type a comment first."); return; }
+  if (!text) { flash("Type a comment first.", { kind: "warning" }); return; }
   const id = state.selected.getAttribute("data-edit-id");
   const raw = (state.selected.innerText && state.selected.innerText.trim())
     || (state.selected.textContent || "");
@@ -34,12 +34,12 @@ export async function sendComment() {
   const tag = state.selected.tagName.toLowerCase();
   try {
     await api.comment(id, text, excerpt, tag);
-    flash("Sent to agent.");
+    flash("Sent to agent.", { kind: "success" });
     dom.commentTA.value = "";
     dom.commentBox.hidden = true;
     loadComments();
   } catch (err) {
-    flash("Comment failed: " + err.message);
+    flash("Comment failed: " + err.message, { kind: "error" });
   }
 }
 
@@ -106,7 +106,7 @@ export async function loadComments() {
           el.scrollIntoView({ behavior: "smooth", block: "center" });
           setTimeout(() => selectElementInternal(el), 350);
         } else {
-          flash("That element no longer exists in the DOM.");
+          flash("That element no longer exists in the DOM.", { kind: "warning" });
         }
       });
       dom.clist.appendChild(d);
@@ -131,18 +131,18 @@ export function initSidebarButtons() {
   dom.sidebar.querySelector('[data-act="copy"]').addEventListener("click", async () => {
     try {
       const items = await api.listComments();
-      if (!items.length) { flash("No comments to copy."); return; }
+      if (!items.length) { flash("No comments to copy.", { kind: "warning" }); return; }
       const lines = items.map((c) =>
         `- [${c.id} <${c.tag || "?"}>] ${c.comment}  (on: "${c.excerpt || ""}")`);
       const text = `check comments (${items.length}):\n` + lines.join("\n");
       try {
         await navigator.clipboard.writeText(text);
-        flash("Copied.");
+        flash("Copied.", { kind: "success" });
       } catch (_) {
-        flash("Copy failed; read the comments JSON instead.");
+        flash("Copy failed; read the comments JSON instead.", { kind: "error" });
       }
     } catch (_) {
-      flash("Couldn't load comments.");
+      flash("Couldn't load comments.", { kind: "error" });
     }
   });
 }

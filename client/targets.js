@@ -284,7 +284,7 @@ export function navigate(direction) {
   else if (direction === "right") target = nextEditableSibling(state.selected);
   else if (direction === "up")    target = editableAncestor(state.selected.parentElement);
   else if (direction === "down")  target = firstEditableChild(state.selected);
-  if (!target) { flash("No editable element in that direction."); return; }
+  if (!target) { flash("No editable element in that direction.", { kind: "warning" }); return; }
   selectElementInternal(target);
   ensureVisible(target);
 }
