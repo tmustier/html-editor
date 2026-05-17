@@ -27,6 +27,8 @@ import {
 
 // --- public entry ---------------------------------------------------------
 
+let activeHtmlFinish = null;
+
 export function startEdit(preferredSource, clickX, clickY) {
   if (!state.selected || state.editing) return;
   const target = currentTarget();
@@ -78,6 +80,7 @@ function startHtmlTextEdit(el, clickX, clickY) {
     el.removeAttribute("contenteditable");
     el.classList.remove("__edit_editing");
     state.editing = false;
+    if (activeHtmlFinish === finish) activeHtmlFinish = null;
     if (!commit) {
       if (hadChildren) el.innerHTML = originalHTML;
       else el.innerText = originalText;
@@ -95,6 +98,8 @@ function startHtmlTextEdit(el, clickX, clickY) {
     placeToolbar(el);
   };
 
+  activeHtmlFinish = finish;
+
   const onBlur = () => finish(true);
   const onKey = (e) => {
     if (e.key === "Escape") {
@@ -109,6 +114,11 @@ function startHtmlTextEdit(el, clickX, clickY) {
   };
   el.addEventListener("blur",    onBlur, true);
   el.addEventListener("keydown", onKey,  true);
+}
+
+export async function finishActiveEdit(commit = true) {
+  if (activeHtmlFinish) return activeHtmlFinish(commit);
+  if (state.svgEditing) return finishSvgLabelEdit(commit);
 }
 
 // Caret placement: prefer caretRangeFromPoint (Chrome) then

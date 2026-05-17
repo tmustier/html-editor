@@ -180,6 +180,117 @@ export function firstEditableChild(el) {
   ) || null;
 }
 
+// --- grid/table navigation ------------------------------------------------
+
+export function gridCellFrom(el) {
+  if (!el || isInsideSvg(el)) return null;
+  const node = el.nodeType === Node.ELEMENT_NODE ? el : el.parentElement;
+  const cell = node && node.closest ? node.closest("td, th") : null;
+  return cell && isEditable(cell) ? cell : null;
+}
+
+function positiveSpan(value, fallback) {
+  const n = Number.parseInt(value || String(fallback || 1), 10);
+  return Number.isFinite(n) && n > 0 ? n : 1;
+}
+
+function selectableInCell(cell) {
+  if (!cell) return null;
+  if (isEditable(cell)) return cell;
+  return firstEditableChild(cell);
+}
+
+function gridForCell(cell) {
+  const table = cell && cell.closest ? cell.closest("table") : null;
+  if (!table) return null;
+  const rows = Array.from(table.rows || table.querySelectorAll("tr"));
+  const matrix = [];
+  const cells = [];
+  let position = null;
+
+  rows.forEach((row, rowIndex) => {
+    matrix[rowIndex] = matrix[rowIndex] || [];
+    let colIndex = 0;
+    Array.from(row.cells || row.querySelectorAll("th, td")).forEach((cellEl) => {
+      while (matrix[rowIndex][colIndex]) colIndex += 1;
+      const rowSpan = positiveSpan(cellEl.getAttribute("rowspan"), cellEl.rowSpan);
+      const colSpan = positiveSpan(cellEl.getAttribute("colspan"), cellEl.colSpan);
+      const entry = { cell: cellEl, row: rowIndex, col: colIndex, rowSpan, colSpan };
+      cells.push(entry);
+      if (cellEl === cell) position = entry;
+      for (let r = rowIndex; r < rowIndex + rowSpan; r += 1) {
+        matrix[r] = matrix[r] || [];
+        for (let c = colIndex; c < colIndex + colSpan; c += 1) {
+          matrix[r][c] = cellEl;
+        }
+      }
+      colIndex += colSpan;
+    });
+  });
+
+  return position ? { table, rows, matrix, cells, position } : null;
+}
+
+function differentCellAt(matrix, row, col, current) {
+  const cell = matrix[row] && matrix[row][col];
+  if (!cell || cell === current) return null;
+  return selectableInCell(cell);
+}
+
+export function gridNeighbor(el, direction) {
+  const cell = gridCellFrom(el);
+  const grid = cell && gridForCell(cell);
+  if (!grid) return null;
+  const { matrix, position } = grid;
+  const cols = Array.from(
+    { length: position.colSpan },
+    (_, i) => position.col + i,
+  );
+
+  if (direction === "up") {
+    for (let r = position.row - 1; r >= 0; r -= 1) {
+      for (const c of cols) {
+        const target = differentCellAt(matrix, r, c, cell);
+        if (target) return target;
+      }
+    }
+  }
+  if (direction === "down") {
+    for (let r = position.row + position.rowSpan; r < matrix.length; r += 1) {
+      for (const c of cols) {
+        const target = differentCellAt(matrix, r, c, cell);
+        if (target) return target;
+      }
+    }
+  }
+  if (direction === "left") {
+    for (let c = position.col - 1; c >= 0; c -= 1) {
+      const target = differentCellAt(matrix, position.row, c, cell);
+      if (target) return target;
+    }
+  }
+  if (direction === "right") {
+    const row = matrix[position.row] || [];
+    for (let c = position.col + position.colSpan; c < row.length; c += 1) {
+      const target = differentCellAt(matrix, position.row, c, cell);
+      if (target) return target;
+    }
+  }
+  return null;
+}
+
+export function gridTabNeighbor(el, forward = true) {
+  const cell = gridCellFrom(el);
+  const grid = cell && gridForCell(cell);
+  if (!grid) return null;
+  const ordered = grid.cells
+    .map((entry) => entry.cell)
+    .filter((candidate) => selectableInCell(candidate));
+  const index = ordered.indexOf(cell);
+  if (index < 0) return null;
+  return selectableInCell(ordered[index + (forward ? 1 : -1)]);
+}
+
 // --- breadcrumbs / labels -------------------------------------------------
 
 function escapeHtml(str) {
@@ -325,4 +436,17 @@ export function navigate(direction) {
   if (!target) { flash("No editable element in that direction.", { kind: "warning" }); return; }
   selectElementInternal(target);
   ensureVisible(target);
+}
+
+export function navigateGrid(direction) {
+  if (!state.selected) return false;
+  const target = direction === "next"
+    ? gridTabNeighbor(state.selected, true)
+    : direction === "previous"
+      ? gridTabNeighbor(state.selected, false)
+      : gridNeighbor(state.selected, direction);
+  if (!target) return false;
+  selectElementInternal(target);
+  ensureVisible(target);
+  return true;
 }

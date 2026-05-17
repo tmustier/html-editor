@@ -8,6 +8,7 @@ import { state } from "./state.js";
 import {
   currentTarget,
   navigate,
+  navigateGrid,
   placeBox,
   placeToolbar,
   toggleHelp,
@@ -53,6 +54,7 @@ export function initRuntime() {
     startEdit,
     startComment,
     navigate,
+    navigateGrid,
     toggleHelp,
     beginDrag,
     target: currentTarget,

@@ -2,6 +2,19 @@ import { test, expect } from "@playwright/test";
 import { startEditor, waitForEditor } from "./helpers.js";
 
 test.describe("keyboard navigation + adversarial flows", () => {
+  async function selectCell(page, text) {
+    const id = await page.locator(`td:has-text("${text}")`).first()
+      .getAttribute("data-edit-id");
+    await page.evaluate((id) => {
+      window.__edit.select(document.querySelector(`[data-edit-id="${id}"]`));
+    }, id);
+  }
+
+  async function selectedText(page) {
+    return await page.evaluate(() =>
+      (window.__edit.target()?.el?.textContent || "").trim());
+  }
+
   test("Option+Arrow walks siblings + into children", async ({ page }) => {
     const editor = await startEditor("deep-nesting.html");
     try {
@@ -33,6 +46,57 @@ test.describe("keyboard navigation + adversarial flows", () => {
       await page.keyboard.press("Alt+ArrowRight");
       const next = await page.evaluate(() => window.__edit.target().id);
       expect(next).not.toBe(firstArticleId);
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("plain arrows navigate table grids while Option+Arrow keeps structural nav", async ({ page }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+
+      await selectCell(page, "Epsilon");
+      await page.keyboard.press("ArrowUp");
+      expect(await selectedText(page)).toBe("Beta");
+      await page.keyboard.press("ArrowDown");
+      expect(await selectedText(page)).toBe("Epsilon");
+      await page.keyboard.press("ArrowLeft");
+      expect(await selectedText(page)).toBe("Delta");
+      await page.keyboard.press("ArrowRight");
+      expect(await selectedText(page)).toBe("Epsilon");
+
+      await page.keyboard.press("Alt+ArrowUp");
+      const structuralTag = await page.evaluate(() =>
+        window.__edit.target()?.el?.tagName.toLowerCase());
+      expect(structuralTag).toBe("tr");
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("Tab and Shift+Tab walk table cells, including from edit mode", async ({ page }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+
+      await selectCell(page, "Gamma");
+      await page.keyboard.press("Tab");
+      expect(await selectedText(page)).toBe("Delta");
+      await page.keyboard.press("Shift+Tab");
+      expect(await selectedText(page)).toBe("Gamma");
+
+      await selectCell(page, "Alpha");
+      await page.keyboard.press("F2");
+      await page.keyboard.type(" changed");
+      await page.keyboard.press("Tab");
+      await page.waitForFunction(() =>
+        (window.__edit.target()?.el?.textContent || "").trim() === "Beta");
+      expect(await page.evaluate(() =>
+        !!document.querySelector('[contenteditable="true"]'))).toBe(false);
+      await expect.poll(() => editor.readFile()).toContain("Alpha changed");
     } finally {
       await editor.cleanup();
     }

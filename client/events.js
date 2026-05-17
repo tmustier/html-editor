@@ -6,12 +6,14 @@ import { dom, flash, isOverlay } from "./dom.js";
 import { interactionLock, reloadAfterMutation } from "./interaction.js";
 import { sendComment, startComment } from "./comments.js";
 import { beginDrag, beginResize, cancelDrag } from "./drag.js";
-import { finishSvgLabelEdit, startEdit } from "./editing.js";
+import { finishActiveEdit, finishSvgLabelEdit, startEdit } from "./editing.js";
 import { state } from "./state.js";
 import {
   editableFrom,
+  gridCellFrom,
   isSvgLabelHit,
   navigate,
+  navigateGrid,
   placeBox,
   placeToolbar,
   selectElementInternal,
@@ -139,6 +141,20 @@ export function initEvents() {
     }
 
     const key = e.key.toLowerCase();
+    if (e.key === "Tab" && state.selected && gridCellFrom(state.selected)
+        && (state.editing || !isOverlay(t))) {
+      e.preventDefault();
+      e.stopPropagation();
+      const direction = e.shiftKey ? "previous" : "next";
+      void (async () => {
+        if (state.editing) await finishActiveEdit(true);
+        if (!navigateGrid(direction)) {
+          flash(e.shiftKey ? "No previous grid cell." : "No next grid cell.", { kind: "warning" });
+        }
+      })();
+      return;
+    }
+
     const isHistoryKey = (e.metaKey || e.ctrlKey) && !e.altKey
       && (key === "z" || key === "y");
     if (isHistoryKey && !inEditableField && !state.editing) {
@@ -156,6 +172,19 @@ export function initEvents() {
     }
 
     if (!state.selected) return;
+
+    const plainGridArrow = !e.altKey && !e.metaKey && !e.ctrlKey && !e.shiftKey
+      && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key)
+      && gridCellFrom(state.selected)
+      && !isOverlay(t);
+    if (plainGridArrow) {
+      e.preventDefault();
+      const direction = e.key.replace("Arrow", "").toLowerCase();
+      if (!navigateGrid(direction)) {
+        flash("No grid cell in that direction.", { kind: "warning" });
+      }
+      return;
+    }
 
     if (e.key === "F2" || e.key === "Enter" || key === "e") {
       e.preventDefault(); startEdit(); return;
