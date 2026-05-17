@@ -26,5 +26,11 @@ Edits write straight back to the source file. Comments arrive back here as
 user messages automatically (the `html-editor-comments` extension is
 bundled with this package).
 
+If the document is very large, the user may not be able to take it in all
+at once in a single page. Consider splitting it into several smaller HTML
+files (one per section, chapter, or logical segment) and opening each in
+its own editor instance on a different port so the user can review and
+edit each piece comfortably.
+
 For anything deeper, read the README in the repo — it's a small tool,
 inspect the code directly if you need more.
