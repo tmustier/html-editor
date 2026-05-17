@@ -1,7 +1,7 @@
-"""Tests for server/comments.py — file-backed store + JSONL bridge.
+"""Tests for server/comments.py — file-backed store + optional JSONL bridge.
 
-We monkey-patch BRIDGE_FILE to a tempfile so we don't trample the real one
-when running tests in parallel with a live editor session.
+The bridge is always routed to a tempfile (or disabled) so tests never touch
+/tmp/html-editor-comments.jsonl while live pi sessions are running.
 """
 
 from __future__ import annotations
@@ -19,11 +19,8 @@ class CommentStoreFlow(unittest.TestCase):
         self.tmp = TemporaryDirectory()
         self.cpath = Path(self.tmp.name) / "doc.html.comments.json"
         self.bridge = Path(self.tmp.name) / "bridge.jsonl"
-        self._original_bridge = C.BRIDGE_FILE
-        C.BRIDGE_FILE = self.bridge
 
     def tearDown(self):
-        C.BRIDGE_FILE = self._original_bridge
         self.tmp.cleanup()
 
     def test_load_returns_empty_when_no_file(self):
@@ -40,8 +37,13 @@ class CommentStoreFlow(unittest.TestCase):
         store = C.CommentStore(self.cpath)
         self.assertEqual(store.load(), [])
 
-    def test_add_appends_to_file_and_bridge(self):
+    def test_default_bridge_is_disabled(self):
         store = C.CommentStore(self.cpath)
+        store.add("e1", "p", "local only", "", Path("/some/doc.html"))
+        self.assertFalse(self.bridge.exists())
+
+    def test_add_appends_to_file_and_bridge(self):
+        store = C.CommentStore(self.cpath, bridge_path=self.bridge)
         entry = store.add("e1", "p", "tighten this", "the excerpt", Path("/some/doc.html"))
         self.assertEqual(entry["id"], "e1")
         self.assertEqual(entry["comment"], "tighten this")
@@ -57,7 +59,7 @@ class CommentStoreFlow(unittest.TestCase):
         self.assertEqual(json.loads(bridge_lines[0])["comment"], "tighten this")
 
     def test_multiple_adds_accumulate(self):
-        store = C.CommentStore(self.cpath)
+        store = C.CommentStore(self.cpath, bridge_path=self.bridge)
         store.add("e1", "p", "first", "", Path("/x"))
         store.add("e2", "div", "second", "", Path("/x"))
         on_disk = json.loads(self.cpath.read_text())

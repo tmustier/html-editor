@@ -22,7 +22,7 @@ from urllib.parse import urlparse
 
 from . import document
 from . import assets
-from .comments import BRIDGE_FILE, CommentStore
+from .comments import DEFAULT_BRIDGE_FILE, CommentStore
 from .history import History
 
 
@@ -57,11 +57,16 @@ def _inject_overlay(soup) -> str:
 def make_handler(
     html_path: Path,
     comments_path: Path,
+    bridge_path: Optional[Path] = DEFAULT_BRIDGE_FILE,
 ) -> type[BaseHTTPRequestHandler]:
     """Build a Handler class bound to one document. Per-server state lives in
-    closure so we never juggle class-level globals."""
+    closure so we never juggle class-level globals.
+
+    bridge_path controls the pi extension JSONL bridge for this server.
+    Pass None to disable it (recommended for e2e tests).
+    """
     history = History(html_path)
-    comment_store = CommentStore(comments_path)
+    comment_store = CommentStore(comments_path, bridge_path=bridge_path)
 
     class Handler(BaseHTTPRequestHandler):
         # Quiet the default access log; we print our own structured events.
@@ -131,7 +136,9 @@ def make_handler(
                 self._send_json(200, {
                     "ok": True,
                     "file": str(html_path),
-                    "bridge_file": str(BRIDGE_FILE),
+                    "bridge_file": (
+                        str(bridge_path) if bridge_path is not None else None
+                    ),
                 })
                 return
             self.send_error(404)
@@ -292,7 +299,8 @@ def make_handler(
                 f'"{comment}"  (on: {excerpt!r})\n')
             sys.stderr.flush()
             self._send_json(200, {
-                "ok": True, "entry": entry, "bridge": str(BRIDGE_FILE),
+                "ok": True, "entry": entry,
+                "bridge": str(bridge_path) if bridge_path is not None else None,
             })
 
     # POST route table — the canonical list of editor capabilities.
