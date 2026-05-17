@@ -117,6 +117,7 @@ test.describe("keyboard navigation + adversarial flows", () => {
 
       await selectCell(page, "Alpha");
       await page.keyboard.press("Meta+C");
+      await expect(page.locator("#__edit_commentbox")).toBeHidden();
       await selectCell(page, "Epsilon");
       await page.keyboard.press("Meta+V");
 

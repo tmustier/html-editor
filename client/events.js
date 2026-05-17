@@ -279,10 +279,11 @@ export function initEvents() {
       return;
     }
 
-    if (e.key === "F2" || e.key === "Enter" || key === "e") {
+    const unmodified = !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey;
+    if (e.key === "F2" || (unmodified && (e.key === "Enter" || key === "e"))) {
       e.preventDefault(); startEdit(); return;
     }
-    if (key === "c") {
+    if (unmodified && key === "c") {
       e.preventDefault(); startComment(); return;
     }
     if (e.altKey) {
