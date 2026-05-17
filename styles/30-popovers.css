@@ -1,0 +1,92 @@
+#__edit_commentbox {
+  position: absolute;
+  z-index: 2147483645;
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 8px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+  width: 320px;
+}
+#__edit_commentbox textarea {
+  width: 100%;
+  min-height: 80px;
+  resize: vertical;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}
+#__edit_commentbox textarea:focus { border-color: #2563eb; }
+#__edit_commentbox .row {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+#__edit_commentbox button {
+  padding: 5px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  font: inherit;
+  font-size: 12px;
+}
+#__edit_commentbox button[data-act="send"] {
+  background: #2563eb;
+  color: #fff;
+  border-color: #2563eb;
+}
+
+#__edit_svgeditor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  z-index: 2147483646;
+  pointer-events: none;
+}
+#__edit_svgeditor .__edit_svg_input {
+  position: absolute;
+  z-index: 2147483646;
+  pointer-events: auto;
+  box-sizing: border-box;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  outline: none;
+  background: transparent;
+  box-shadow: none;
+  opacity: 0;
+  color: transparent;
+  caret-color: transparent;
+}
+#__edit_svgeditor .__edit_svg_input:focus {
+  outline: none;
+  background: transparent;
+  box-shadow: none;
+}
+#__edit_svgeditor .__edit_svg_caret {
+  position: absolute;
+  z-index: 2147483647;
+  width: 1.5px;
+  min-height: 12px;
+  background: #2563eb;
+  pointer-events: none;
+  animation: __edit_caret_blink 1s steps(1) infinite;
+}
+@keyframes __edit_caret_blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+html.__edit_active svg text,
+html.__edit_active svg tspan {
+  -webkit-user-select: none;
+  user-select: none;
+}
+

@@ -1,0 +1,36 @@
+.__edit_editing {
+  outline: 2px dashed #f59e0b !important;
+  outline-offset: 2px;
+  background: rgba(254, 243, 199, 0.45) !important;
+}
+
+html.__edit_dragging,
+html.__edit_dragging * {
+  cursor: grabbing !important;
+}
+.__edit_ghost {
+  position: fixed;
+  z-index: 2147483647;
+  pointer-events: none;
+  max-width: 360px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: rgba(17, 24, 39, 0.94);
+  color: #fff;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+  font: 12px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Brief green pulse after a successful save so feedback lives at the source
+   of the change, not just the toast. */
+.__edit_pulse {
+  animation: __edit_pulse 0.7s ease-out;
+}
+@keyframes __edit_pulse {
+  0%   { box-shadow: 0 0 0 0   rgba(34, 197, 94, 0.55); }
+  100% { box-shadow: 0 0 0 14px rgba(34, 197, 94, 0); }
+}
+

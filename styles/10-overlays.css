@@ -1,0 +1,61 @@
+#__edit_hover, #__edit_select {
+  position: absolute;
+  pointer-events: none;
+  z-index: 2147483640;
+  display: none;
+  border-radius: 2px;
+  transition: top .04s linear, left .04s linear, width .04s linear, height .04s linear;
+}
+#__edit_hover {
+  border: 1px dashed rgba(59, 130, 246, 0.75);
+  background: rgba(59, 130, 246, 0.06);
+}
+#__edit_select {
+  border: 2px solid #2563eb;
+  background: rgba(37, 99, 235, 0.08);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6) inset;
+}
+
+/* Resize handles — the selectBox itself stays pointer-events:none so the
+   user can keep clicking/typing inside the element it outlines, but the
+   individual handles override that and become draggable. Visible only when
+   the selected element is marked as resizable. */
+.__edit_handle {
+  position: absolute;
+  display: none;
+  width: 10px;
+  height: 10px;
+  background: #2563eb;
+  border: 1.5px solid #ffffff;
+  border-radius: 2px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  pointer-events: auto;
+  z-index: 2147483641;
+}
+#__edit_select[data-resizable="true"] .__edit_handle { display: block; }
+.__edit_handle.h-e  { right: -6px;  top: 50%;     transform: translateY(-50%); cursor: ew-resize; }
+.__edit_handle.h-s  { bottom: -6px; left: 50%;    transform: translateX(-50%); cursor: ns-resize; }
+.__edit_handle.h-se { right: -6px;  bottom: -6px;                               cursor: nwse-resize; }
+html.__edit_resizing,
+html.__edit_resizing * { cursor: nwse-resize !important; user-select: none !important; }
+#__edit_drop {
+  position: absolute;
+  height: 0;
+  border-top: 3px solid #10b981;
+  z-index: 2147483644;
+  pointer-events: none;
+  filter: drop-shadow(0 1px 3px rgba(16, 185, 129, 0.45));
+}
+#__edit_drop::before,
+#__edit_drop::after {
+  content: "";
+  position: absolute;
+  top: -6px;
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: #10b981;
+}
+#__edit_drop::before { left: -3px; }
+#__edit_drop::after { right: -3px; }
+

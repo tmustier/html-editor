@@ -1,0 +1,450 @@
+/* All overlay UI lives under #__edit_root and uses very high z-indices
+   so it sits above the host document. */
+
+#__edit_root, #__edit_root * {
+  box-sizing: border-box;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+}
+#__edit_root [hidden] { display: none !important; }
+#__edit_root .i {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: currentColor;
+  vertical-align: -3px;
+}
+#__edit_root .i svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+#__edit_hover, #__edit_select {
+  position: absolute;
+  pointer-events: none;
+  z-index: 2147483640;
+  display: none;
+  border-radius: 2px;
+  transition: top .04s linear, left .04s linear, width .04s linear, height .04s linear;
+}
+#__edit_hover {
+  border: 1px dashed rgba(59, 130, 246, 0.75);
+  background: rgba(59, 130, 246, 0.06);
+}
+#__edit_select {
+  border: 2px solid #2563eb;
+  background: rgba(37, 99, 235, 0.08);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6) inset;
+}
+#__edit_drop {
+  position: absolute;
+  height: 0;
+  border-top: 3px solid #10b981;
+  z-index: 2147483644;
+  pointer-events: none;
+  filter: drop-shadow(0 1px 3px rgba(16, 185, 129, 0.45));
+}
+#__edit_drop::before,
+#__edit_drop::after {
+  content: "";
+  position: absolute;
+  top: -6px;
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: #10b981;
+}
+#__edit_drop::before { left: -3px; }
+#__edit_drop::after { right: -3px; }
+
+#__edit_toolbar {
+  position: absolute;
+  z-index: 2147483645;
+  background: #111827;
+  color: #fff;
+  border-radius: 6px;
+  padding: 4px;
+  display: flex;
+  gap: 2px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
+  font-size: 12px;
+  white-space: nowrap;
+}
+#__edit_toolbar button {
+  background: transparent;
+  color: #fff;
+  border: none;
+  padding: 5px 7px;
+  min-width: 28px;
+  height: 28px;
+  cursor: pointer;
+  border-radius: 4px;
+  font: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+#__edit_toolbar button:hover { background: rgba(255, 255, 255, 0.14); }
+#__edit_toolbar button[disabled] { opacity: 0.35; cursor: not-allowed; }
+#__edit_toolbar button[disabled]:hover { background: transparent; }
+#__edit_toolbar .drag-handle { cursor: grab; }
+#__edit_toolbar .drag-handle:active { cursor: grabbing; }
+#__edit_toolbar .sep {
+  width: 1px;
+  background: rgba(255, 255, 255, 0.15);
+  margin: 4px 2px;
+}
+#__edit_toolbar .path {
+  padding: 5px 8px;
+  color: #d1d5db;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+#__edit_toolbar .path .cur { color: #fff; font-weight: 600; }
+#__edit_toolbar .path .arrow { color: #6b7280; padding: 0 2px; }
+
+#__edit_commentbox {
+  position: absolute;
+  z-index: 2147483645;
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 8px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+  width: 320px;
+}
+#__edit_commentbox textarea {
+  width: 100%;
+  min-height: 80px;
+  resize: vertical;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}
+#__edit_commentbox textarea:focus { border-color: #2563eb; }
+#__edit_commentbox .row {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+#__edit_commentbox button {
+  padding: 5px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  font: inherit;
+  font-size: 12px;
+}
+#__edit_commentbox button[data-act="send"] {
+  background: #2563eb;
+  color: #fff;
+  border-color: #2563eb;
+}
+
+#__edit_svgeditor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  z-index: 2147483646;
+  pointer-events: none;
+}
+#__edit_svgeditor .__edit_svg_input {
+  position: absolute;
+  z-index: 2147483646;
+  pointer-events: auto;
+  box-sizing: border-box;
+  border: 0;
+  border-radius: 1px;
+  padding: 0;
+  margin: 0;
+  outline: 2px solid rgba(37, 99, 235, 0.9);
+  background: rgba(255, 255, 255, 0.28);
+  box-shadow: none;
+  min-width: 18px;
+  overflow: visible;
+}
+#__edit_svgeditor .__edit_svg_input:focus {
+  background: #fff;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.28), 0 4px 14px rgba(0, 0, 0, 0.16);
+}
+
+html.__edit_active svg text,
+html.__edit_active svg tspan {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.__edit_editing {
+  outline: 2px dashed #f59e0b !important;
+  outline-offset: 2px;
+  background: rgba(254, 243, 199, 0.45) !important;
+}
+
+html.__edit_dragging,
+html.__edit_dragging * {
+  cursor: grabbing !important;
+}
+.__edit_ghost {
+  position: fixed;
+  z-index: 2147483647;
+  pointer-events: none;
+  max-width: 360px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: rgba(17, 24, 39, 0.94);
+  color: #fff;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+  font: 12px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Brief green pulse after a successful save so feedback lives at the source
+   of the change, not just the toast. */
+.__edit_pulse {
+  animation: __edit_pulse 0.7s ease-out;
+}
+@keyframes __edit_pulse {
+  0%   { box-shadow: 0 0 0 0   rgba(34, 197, 94, 0.55); }
+  100% { box-shadow: 0 0 0 14px rgba(34, 197, 94, 0); }
+}
+
+/* Shortcut overlay (toggled with ?) */
+#__edit_help {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 24, 39, 0.42);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2147483647;
+  cursor: pointer;
+}
+#__edit_help .card {
+  background: #fff;
+  border-radius: 10px;
+  padding: 18px 22px 22px;
+  min-width: 360px;
+  max-width: 480px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+  cursor: default;
+  font-size: 13px;
+  color: #111827;
+}
+#__edit_help .card h3 {
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 700;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+#__edit_help .card h3 button {
+  background: transparent;
+  border: none;
+  color: #6b7280;
+  font-size: 16px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+#__edit_help .card h3 button:hover { background: #f3f4f6; color: #111827; }
+#__edit_help table { width: 100%; border-collapse: collapse; }
+#__edit_help td {
+  padding: 5px 6px;
+  vertical-align: middle;
+}
+#__edit_help td:first-child {
+  white-space: nowrap;
+  width: 1%;
+  padding-right: 14px;
+  color: #374151;
+}
+#__edit_help td:last-child { color: #4b5563; }
+#__edit_help kbd {
+  display: inline-block;
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: #374151;
+  margin-right: 2px;
+}
+
+#__edit_status {
+  position: fixed;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #111827;
+  color: #fff;
+  padding: 7px 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  z-index: 2147483646;
+  pointer-events: none;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+}
+
+#__edit_sidebar {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  width: 300px;
+  max-height: 80vh;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.14);
+  z-index: 2147483640;
+  display: flex;
+  flex-direction: column;
+  font-size: 12px;
+}
+#__edit_sidebar.collapsed { width: auto; }
+#__edit_sidebar.collapsed .list,
+#__edit_sidebar.collapsed .empty,
+#__edit_sidebar.collapsed .head .count { display: none; }
+
+#__edit_sidebar .head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f9fafb;
+  border-radius: 10px 10px 0 0;
+  font-weight: 600;
+  font-size: 12px;
+  user-select: none;
+}
+#__edit_sidebar.collapsed .head { border-bottom: none; border-radius: 10px; }
+#__edit_sidebar .head .title { flex: 1; }
+#__edit_sidebar .head .count {
+  background: #2563eb;
+  color: #fff;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 1px 7px;
+  font-size: 10px;
+  min-width: 18px;
+  text-align: center;
+}
+#__edit_sidebar .head button {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  line-height: 1;
+  padding: 3px;
+  width: 24px;
+  height: 24px;
+  color: #6b7280;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+#__edit_sidebar .head button:hover { background: #e5e7eb; color: #111827; }
+
+#__edit_sidebar .list {
+  overflow: auto;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+#__edit_sidebar .empty {
+  padding: 16px 12px;
+  color: #9ca3af;
+  font-style: italic;
+  text-align: center;
+}
+#__edit_sidebar .hint {
+  padding: 6px 10px;
+  background: #fef9c3;
+  color: #92400e;
+  font-size: 11px;
+  border-bottom: 1px solid #fde68a;
+}
+#__edit_sidebar .hint code {
+  background: rgba(146, 64, 14, 0.12);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10.5px;
+}
+#__edit_sidebar .c {
+  padding: 8px 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  cursor: pointer;
+  background: #fff;
+}
+#__edit_sidebar .c:hover { background: #f3f4f6; border-color: #d1d5db; }
+#__edit_sidebar .c .cm {
+  font-weight: 500;
+  margin-bottom: 4px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  color: #111827;
+}
+#__edit_sidebar .c .ex {
+  color: #6b7280;
+  font-style: italic;
+  margin-bottom: 4px;
+  word-wrap: break-word;
+  font-size: 11px;
+}
+#__edit_sidebar .c .ts {
+  color: #9ca3af;
+  font-size: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* Tiny dot we render on commented elements */
+.__edit_dot {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #2563eb;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2147483641;
+  pointer-events: auto;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  user-select: none;
+}

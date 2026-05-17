@@ -1,0 +1,28 @@
+/* All overlay UI lives under #__edit_root and uses very high z-indices
+   so it sits above the host document. */
+
+#__edit_root, #__edit_root * {
+  box-sizing: border-box;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+}
+#__edit_root [hidden] { display: none !important; }
+#__edit_root .i {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: currentColor;
+  vertical-align: -3px;
+}
+#__edit_root .i svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
