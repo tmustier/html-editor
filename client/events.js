@@ -173,16 +173,14 @@ export function initEvents() {
 
     if (!state.selected) return;
 
-    const plainGridArrow = !e.altKey && !e.metaKey && !e.ctrlKey && !e.shiftKey
+    const gridArrow = !e.altKey && !e.ctrlKey && !e.shiftKey
       && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key)
       && gridCellFrom(state.selected)
       && !isOverlay(t);
-    if (plainGridArrow) {
+    if (gridArrow) {
       e.preventDefault();
       const direction = e.key.replace("Arrow", "").toLowerCase();
-      if (!navigateGrid(direction)) {
-        flash("No grid cell in that direction.", { kind: "warning" });
-      }
+      navigateGrid(e.metaKey ? `edge-${direction}` : direction);
       return;
     }
 

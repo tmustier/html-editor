@@ -15,6 +15,12 @@ test.describe("keyboard navigation + adversarial flows", () => {
       (window.__edit.target()?.el?.textContent || "").trim());
   }
 
+  async function cmdArrow(page, key) {
+    await page.keyboard.down("Meta");
+    await page.keyboard.press(key);
+    await page.keyboard.up("Meta");
+  }
+
   test("Option+Arrow walks siblings + into children", async ({ page }) => {
     const editor = await startEditor("deep-nesting.html");
     try {
@@ -71,6 +77,30 @@ test.describe("keyboard navigation + adversarial flows", () => {
       const structuralTag = await page.evaluate(() =>
         window.__edit.target()?.el?.tagName.toLowerCase());
       expect(structuralTag).toBe("tr");
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("grid arrow misses stay quiet and Cmd+Arrow jumps to row or column edge", async ({ page }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+
+      await selectCell(page, "Epsilon");
+      await cmdArrow(page, "ArrowRight");
+      expect(await selectedText(page)).toBe("Zeta");
+      await cmdArrow(page, "ArrowLeft");
+      expect(await selectedText(page)).toBe("Delta");
+      await cmdArrow(page, "ArrowDown");
+      expect(await selectedText(page)).toBe("Eta");
+      await cmdArrow(page, "ArrowUp");
+      expect(await selectedText(page)).toBe("Alpha");
+
+      await page.keyboard.press("ArrowLeft");
+      expect(await selectedText(page)).toBe("Alpha");
+      await expect(page.locator("#__edit_status")).not.toHaveText(/No grid cell/i);
     } finally {
       await editor.cleanup();
     }

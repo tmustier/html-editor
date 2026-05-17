@@ -66,6 +66,7 @@ export function initDom() {
           <tr><td><kbd>Cmd</kbd><kbd>Z</kbd></td><td>Undo last saved edit or move</td></tr>
           <tr><td><kbd>Cmd</kbd><kbd>Y</kbd> / <kbd>Cmd</kbd><kbd>Shift</kbd><kbd>Z</kbd></td><td>Redo</td></tr>
           <tr><td><kbd>Arrow keys</kbd></td><td>Move between table/grid cells when a cell is selected</td></tr>
+          <tr><td><kbd>Cmd</kbd><kbd>Arrow keys</kbd></td><td>Jump to the edge of the current table row/column</td></tr>
           <tr><td><kbd>Tab</kbd> / <kbd>Shift</kbd><kbd>Tab</kbd></td><td>Next / previous table cell; saves the current cell first while editing</td></tr>
           <tr><td><kbd>Option</kbd><kbd>Left</kbd> / <kbd>Right</kbd></td><td>Previous / next sibling</td></tr>
           <tr><td><kbd>Option</kbd><kbd>Up</kbd></td><td>Parent</td></tr>

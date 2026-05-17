@@ -291,6 +291,43 @@ export function gridTabNeighbor(el, forward = true) {
   return selectableInCell(ordered[index + (forward ? 1 : -1)]);
 }
 
+export function gridEdgeNeighbor(el, direction) {
+  const cell = gridCellFrom(el);
+  const grid = cell && gridForCell(cell);
+  if (!grid) return null;
+  const { matrix, position } = grid;
+  const targetAt = (candidate) =>
+    candidate && candidate !== cell ? selectableInCell(candidate) : null;
+
+  if (direction === "left") {
+    const row = matrix[position.row] || [];
+    for (let c = 0; c < position.col; c += 1) {
+      const target = targetAt(row[c]);
+      if (target) return target;
+    }
+  }
+  if (direction === "right") {
+    const row = matrix[position.row] || [];
+    for (let c = row.length - 1; c >= position.col + position.colSpan; c -= 1) {
+      const target = targetAt(row[c]);
+      if (target) return target;
+    }
+  }
+  if (direction === "up") {
+    for (let r = 0; r < position.row; r += 1) {
+      const target = targetAt(matrix[r] && matrix[r][position.col]);
+      if (target) return target;
+    }
+  }
+  if (direction === "down") {
+    for (let r = matrix.length - 1; r >= position.row + position.rowSpan; r -= 1) {
+      const target = targetAt(matrix[r] && matrix[r][position.col]);
+      if (target) return target;
+    }
+  }
+  return null;
+}
+
 // --- breadcrumbs / labels -------------------------------------------------
 
 function escapeHtml(str) {
@@ -444,7 +481,9 @@ export function navigateGrid(direction) {
     ? gridTabNeighbor(state.selected, true)
     : direction === "previous"
       ? gridTabNeighbor(state.selected, false)
-      : gridNeighbor(state.selected, direction);
+      : direction.startsWith("edge-")
+        ? gridEdgeNeighbor(state.selected, direction.slice(5))
+        : gridNeighbor(state.selected, direction);
   if (!target) return false;
   selectElementInternal(target);
   ensureVisible(target);
