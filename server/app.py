@@ -29,8 +29,9 @@ def main() -> None:
         "--comments-bridge",
         default=os.environ.get("HTML_EDITOR_COMMENTS_BRIDGE", "none"),
         help=("Path to the JSONL bridge file this specific pi session polls. "
-              "Pass 'none' (or set HTML_EDITOR_COMMENTS_BRIDGE=none) to "
-              "disable pi delivery. Default: none. "
+              "Defaults to HTML_EDITOR_COMMENTS_BRIDGE when present (set by "
+              "the pi html-comments extension), otherwise 'none'. Pass 'none' "
+              "to disable pi delivery. "
               f"Legacy shared file (avoid): {LEGACY_SHARED_BRIDGE_FILE}"))
     args = ap.parse_args()
 

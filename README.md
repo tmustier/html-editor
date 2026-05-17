@@ -10,14 +10,16 @@ python3 serve.py path/to/some.html --port 8765 --no-open
 
 Open `http://127.0.0.1:8765/`.
 
-Comments are stored next to the HTML file in `<file>.comments.json`. Delivery
-into a pi session is **off by default** so local tests and ad-hoc editor
-servers cannot broadcast to every live pi session. To route comments into one
-specific pi session:
+Comments are stored next to the HTML file in `<file>.comments.json`. When the
+server is launched from a pi session with the `html-editor-comments` extension
+loaded, comments are also delivered back to **that same session** by default.
+The extension exports a session-scoped `HTML_EDITOR_COMMENTS_BRIDGE`, and the
+server reads it automatically.
 
-1. In that pi session, run `/html-comments status` and copy the session-scoped
-   bridge path.
-2. Start the editor with `--comments-bridge <that-path>`.
+If launched from a normal terminal with no `HTML_EDITOR_COMMENTS_BRIDGE`, pi
+delivery is disabled rather than falling back to a shared broadcast file. You
+can override routing explicitly with `--comments-bridge <path>` or disable it
+with `--comments-bridge none`.
 
 Do not use the historical shared `/tmp/html-editor-comments.jsonl` bridge unless
 you deliberately want broadcast-style legacy behaviour.
