@@ -17,9 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
-import platform
 import re
-import subprocess
 import sys
 import threading
 import time
@@ -146,7 +144,6 @@ def inject_overlay(soup: BeautifulSoup) -> str:
 
 # ---- bridge / OS helpers --------------------------------------------------
 
-IS_MAC = platform.system() == "Darwin"
 TRIGGER_FILE = Path("/tmp/html-editor-comments.jsonl")
 MAX_HISTORY = 50
 
@@ -303,39 +300,9 @@ def _is_text_editable(el) -> bool:
 
 def append_trigger(entry: dict) -> None:
     """Append a single JSONL line read by the pi extension bridge."""
-    try:
-        TRIGGER_FILE.parent.mkdir(parents=True, exist_ok=True)
-        with TRIGGER_FILE.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-    except Exception as e:
-        sys.stderr.write(f"[bridge] failed to append trigger: {e}\n")
-
-
-def notify(title: str, body: str) -> None:
-    if not IS_MAC:
-        return
-    safe_title = title.replace("\\", "\\\\").replace("\"", "\\\"")
-    safe_body = body.replace("\\", "\\\\").replace("\"", "\\\"")[:240]
-    try:
-        subprocess.run(
-            ["osascript", "-e",
-             f'display notification "{safe_body}" with title "{safe_title}" sound name "Pop"'],
-            timeout=3, check=False,
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        )
-    except Exception:
-        pass
-
-
-def pbcopy(text: str) -> None:
-    if not IS_MAC:
-        return
-    try:
-        subprocess.run(["pbcopy"], input=text.encode("utf-8"),
-                       timeout=2, check=False,
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    except Exception:
-        pass
+    TRIGGER_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with TRIGGER_FILE.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -366,7 +333,7 @@ class Handler(BaseHTTPRequestHandler):
             return {}
         try:
             return json.loads(self.rfile.read(length))
-        except Exception:
+        except (json.JSONDecodeError, UnicodeDecodeError):
             return None
 
     # ---- routes ----
@@ -392,7 +359,6 @@ class Handler(BaseHTTPRequestHandler):
                 "ok": True,
                 "file": str(self.html_path),
                 "bridge_file": str(TRIGGER_FILE),
-                "is_mac": IS_MAC,
             })
             return
         self.send_error(404)
@@ -419,10 +385,6 @@ class Handler(BaseHTTPRequestHandler):
             return self._redo()
         if url.path == "/comment":
             return self._add_comment(payload)
-        if url.path == "/comments/clear":
-            self.comments_path.write_text("[]", encoding="utf-8")
-            self._send_json(200, {"ok": True})
-            return
         self.send_error(404)
 
     # ---- comment store ----
@@ -431,9 +393,9 @@ class Handler(BaseHTTPRequestHandler):
             return []
         try:
             data = json.loads(self.comments_path.read_text(encoding="utf-8"))
-            return data if isinstance(data, list) else []
-        except Exception:
+        except (json.JSONDecodeError, OSError, UnicodeDecodeError):
             return []
+        return data if isinstance(data, list) else []
 
     def _save_comments(self, data):
         self.comments_path.write_text(
@@ -713,11 +675,8 @@ class Handler(BaseHTTPRequestHandler):
         data.append(entry)
         self._save_comments(data)
 
-        # 1. Pi extension bridge: appends to the JSONL the watcher reads.
+        # Pi extension bridge: appends to the JSONL the watcher reads.
         append_trigger(entry)
-
-        # 2. macOS notification (purely informational; the bridge is the hook).
-        notify("HTML editor \u2014 comment sent to agent", comment[:160])
 
         sys.stderr.write(
             f"[comment] {entry['timestamp']}  {edit_id} <{tag}>  "

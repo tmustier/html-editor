@@ -1,6 +1,6 @@
 # HTML collaboration editor
 
-Prototype local editor for generated HTML files. The server injects a small browser overlay into the target HTML and writes edits back to the source file.
+Prototype local editor for any generated HTML file. The server injects a small browser overlay into the target HTML and writes edits back to the source file. There is no build step.
 
 ## Run
 
@@ -13,10 +13,8 @@ Open `http://127.0.0.1:8765/`.
 ## Structure
 
 - `serve.py` — local HTTP server, source-file mutation endpoints, comments, undo/redo history, pi comment bridge.
-- `client/*.js` — browser overlay code, concatenated in filename order by `serve.py` at startup. No build step.
-- `styles/*.css` — overlay styles, concatenated in filename order by `serve.py` at startup. No build step.
-- `editor.js` / `editor.css` — compatibility placeholders only; do not edit.
-- `legacy/` — old monolithic snapshots kept for rollback while prototyping.
+- `client/*.js` — browser overlay code, concatenated in filename order by `serve.py` at startup.
+- `styles/*.css` — overlay styles, concatenated in filename order by `serve.py` at startup.
 
 ## Client file map
 

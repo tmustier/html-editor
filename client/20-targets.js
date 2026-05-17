@@ -111,13 +111,12 @@
     if (isInsideSvg(target)) {
       // Prefer a labelled <g> when one wraps the hit; otherwise, allow direct
       // editing of orphan <text> elements (so flat SVG diagrams are usable).
-      // Fall back to the containing diagram for clicks on bare rects/paths.
+      // Otherwise fall through to the generic walk-up which catches the
+      // nearest editable ancestor (the enclosing SVG container itself).
       const group = target.closest && target.closest('g[data-edit-id]');
       if (group && isEditable(group)) return group;
       const text = target.closest && target.closest('text[data-edit-id]');
       if (text && isEditable(text)) return text;
-      const diagram = target.closest && target.closest('[data-edit-id].diagram');
-      if (diagram && isEditable(diagram)) return diagram;
     }
     let el = target;
     while (el && !isEditable(el)) el = el.parentElement;
