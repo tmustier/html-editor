@@ -1,7 +1,5 @@
 .__edit_editing {
-  outline: 2px dashed #f59e0b !important;
-  outline-offset: 2px;
-  background: rgba(254, 243, 199, 0.45) !important;
+  outline: none !important;
 }
 
 html.__edit_dragging,
