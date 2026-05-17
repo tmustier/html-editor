@@ -21,25 +21,32 @@ from typing import Callable, Optional
 from urllib.parse import urlparse
 
 from . import document
-from .assets import EDITOR_CSS, EDITOR_JS
+from . import assets
 from .comments import BRIDGE_FILE, CommentStore
 from .history import History
 
 
 def _inject_overlay(soup) -> str:
-    """Return the HTML string with editor CSS + JS injected at head/body close."""
+    """Inject the editor's CSS link + module script tags into the page.
+
+    The cache buster keeps reloads honest while we iterate. The script tag
+    is type=module so the browser fetches the rest of client/*.js itself.
+    """
     html = str(soup)
-    css_tag = f'<style id="__edit_css">{EDITOR_CSS}</style>'
+    version = json.dumps(str(int(time.time() * 1000)))
+    css_link = (
+        f'<link id="__edit_css" rel="stylesheet" '
+        f'href="/__editor/main.css?v={version[1:-1]}">'
+    )
     js_tag = (
-        '<script id="__edit_js">'
-        f"window.__EDIT_VERSION = {json.dumps(time.time())};\n"
-        f"{EDITOR_JS}"
-        "</script>"
+        f'<script type="module" id="__edit_js" '
+        f'src="/__editor/client/{assets.CLIENT_ENTRY}?v={version[1:-1]}">'
+        '</script>'
     )
     if "</head>" in html:
-        html = html.replace("</head>", css_tag + "\n</head>", 1)
+        html = html.replace("</head>", css_link + "\n</head>", 1)
     else:
-        html = css_tag + html
+        html = css_link + html
     if "</body>" in html:
         html = html.replace("</body>", js_tag + "\n</body>", 1)
     else:
@@ -89,17 +96,33 @@ def make_handler(
                 self._send_json(status, payload)
 
         # ---- routes ----
+        def _send_bytes(self, body: bytes, content_type: str) -> None:
+            self.send_response(200)
+            self.send_header("Content-Type", content_type)
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(body)
+
         def do_GET(self):  # noqa: N802
             url = urlparse(self.path)
             if url.path in ("/", "/index.html"):
                 soup = document.ensure_edit_ids(html_path)
-                body = _inject_overlay(soup).encode("utf-8")
-                self.send_response(200)
-                self.send_header("Content-Type", "text/html; charset=utf-8")
-                self.send_header("Content-Length", str(len(body)))
-                self.send_header("Cache-Control", "no-store")
-                self.end_headers()
-                self.wfile.write(body)
+                self._send_bytes(
+                    _inject_overlay(soup).encode("utf-8"),
+                    "text/html; charset=utf-8")
+                return
+            if url.path == "/__editor/main.css":
+                self._send_bytes(assets.read_bundled_css(),
+                                 "text/css; charset=utf-8")
+                return
+            if url.path.startswith("/__editor/client/"):
+                name = url.path[len("/__editor/client/"):]
+                body = assets.read_client_module(name)
+                if body is None:
+                    self.send_error(404)
+                    return
+                self._send_bytes(body, "application/javascript; charset=utf-8")
                 return
             if url.path == "/comments":
                 self._send_json(200, comment_store.load())

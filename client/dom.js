@@ -1,4 +1,19 @@
-  // --- build UI ------------------------------------------------------------
+// Builds the overlay DOM (inserted into the host page <body>) and exposes
+// the named element references the other modules use.
+//
+// Also owns the two cross-cutting UI helpers: icon() and flash().
+
+import { ICONS } from "./config.js";
+
+export function icon(name) {
+  return `<span class="i i-${name}" aria-hidden="true">${ICONS[name]}</span>`;
+}
+
+// dom.* refs are populated by initDom(). Other modules import { dom } and
+// access dom.toolbar, dom.selectBox, etc.
+export const dom = {};
+
+export function initDom() {
   const root = document.createElement("div");
   root.id = "__edit_root";
   root.innerHTML = `
@@ -72,27 +87,60 @@
   document.body.appendChild(root);
   document.documentElement.classList.add("__edit_active");
 
-  const hoverBox  = root.querySelector("#__edit_hover");
-  const selectBox = root.querySelector("#__edit_select");
-  const dropLine  = root.querySelector("#__edit_drop");
-  const toolbar   = root.querySelector("#__edit_toolbar");
-  const pathEl    = toolbar.querySelector("[data-role=path]");
-  const editBtn   = toolbar.querySelector("[data-act=edit]");
-  const dragBtn   = toolbar.querySelector("[data-act=drag]");
-  const navPrev   = toolbar.querySelector("[data-act=nav-prev]");
-  const navNext   = toolbar.querySelector("[data-act=nav-next]");
-  const navParent = toolbar.querySelector("[data-act=nav-parent]");
-  const navChild  = toolbar.querySelector("[data-act=nav-child]");
-  const helpOverlay = root.querySelector("#__edit_help");
+  const toolbar = root.querySelector("#__edit_toolbar");
   const commentBox = root.querySelector("#__edit_commentbox");
-  const commentTA  = commentBox.querySelector("textarea");
+  const sidebar = root.querySelector("#__edit_sidebar");
   const svgEditor = root.querySelector("#__edit_svgeditor");
-  const svgFields = svgEditor;
-  const status    = root.querySelector("#__edit_status");
-  const sidebar   = root.querySelector("#__edit_sidebar");
-  const clist     = sidebar.querySelector("#__edit_clist");
-  const countEl   = sidebar.querySelector("[data-role=count]");
-  const emptyEl   = sidebar.querySelector("[data-role=empty]");
-  const hintEl    = sidebar.querySelector("[data-role=hint]");
-  const toggleBtn = sidebar.querySelector('[data-act="toggle"]');
 
+  Object.assign(dom, {
+    root,
+    hoverBox:    root.querySelector("#__edit_hover"),
+    selectBox:   root.querySelector("#__edit_select"),
+    dropLine:    root.querySelector("#__edit_drop"),
+    toolbar,
+    pathEl:      toolbar.querySelector("[data-role=path]"),
+    editBtn:     toolbar.querySelector("[data-act=edit]"),
+    dragBtn:     toolbar.querySelector("[data-act=drag]"),
+    navPrev:     toolbar.querySelector("[data-act=nav-prev]"),
+    navNext:     toolbar.querySelector("[data-act=nav-next]"),
+    navParent:   toolbar.querySelector("[data-act=nav-parent]"),
+    navChild:    toolbar.querySelector("[data-act=nav-child]"),
+    helpOverlay: root.querySelector("#__edit_help"),
+    commentBox,
+    commentTA:   commentBox.querySelector("textarea"),
+    svgEditor,
+    svgFields:   svgEditor,
+    status:      root.querySelector("#__edit_status"),
+    sidebar,
+    clist:       sidebar.querySelector("#__edit_clist"),
+    countEl:     sidebar.querySelector("[data-role=count]"),
+    emptyEl:     sidebar.querySelector("[data-role=empty]"),
+    hintEl:      sidebar.querySelector("[data-role=hint]"),
+    toggleBtn:   sidebar.querySelector('[data-act="toggle"]'),
+  });
+}
+
+let flashTimer = 0;
+export function flash(msg) {
+  dom.status.textContent = msg;
+  dom.status.style.opacity = "1";
+  clearTimeout(flashTimer);
+  flashTimer = setTimeout(() => { dom.status.style.opacity = "0"; }, 2200);
+}
+
+export function isOverlay(el) {
+  return !!(el && (el.id === "__edit_root"
+    || (el.closest && el.closest("#__edit_root"))
+    || (el.classList && el.classList.contains("__edit_dot"))));
+}
+
+// Bounding rect in document (scroll-relative) coordinates.
+export function rectOf(el) {
+  const r = el.getBoundingClientRect();
+  return {
+    top: r.top + window.scrollY,
+    left: r.left + window.scrollX,
+    width: r.width,
+    height: r.height,
+  };
+}

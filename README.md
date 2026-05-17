@@ -20,8 +20,22 @@ Open `http://127.0.0.1:8765/`.
   - `history.py` thread-safe undo/redo over disk snapshots
   - `comments.py` comment store + pi extension JSONL bridge
   - `assets.py` reads `client/*.js` and `styles/*.css` at import time
-- `client/*.js` — browser overlay, concatenated in filename order at startup.
-- `styles/*.css` — overlay styles, concatenated in filename order at startup.
+- `client/*.js` — native ES modules. The server serves them at `/__editor/client/<name>.js`; only `main.js` is referenced from the host page (the rest are pulled in by `import`).
+- `styles/*.css` — overlay styles, concatenated in filename order and served at `/__editor/main.css`.
+
+### Client module map
+
+- `main.js` boot entrypoint (initDom, initEvents, initSidebarButtons, initRuntime)
+- `state.js` shared mutable state singleton
+- `config.js` icon SVGs, endpoint URLs, inline-text tag set
+- `api.js` fetch wrappers for every server endpoint + `reloadAfterMutation`
+- `dom.js` builds the overlay DOM, exposes `dom.*` element refs, `icon()`, `flash()`
+- `targets.js` semantic target model + DOM walks + breadcrumb + placement
+- `events.js` mouse/keyboard/toolbar wiring + `selectElement`/`deselect`/`performHistory`
+- `editing.js` HTML inline text edit + SVG label edit (+ caret math)
+- `drag.js` HTML reorder, SVG spatial drag, HTML resize
+- `comments.js` comment box, sidebar list, dot markers
+- `init.js` reflow loop, comment polling, `window.__edit` debug API
 - `tests/` — stdlib `unittest` suite covering every `document.py` function plus `history.py` and `comments.py`.
 
 ## Client file map
