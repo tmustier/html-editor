@@ -129,6 +129,56 @@ test.describe("keyboard navigation + adversarial flows", () => {
     }
   });
 
+  test("Cmd+V preserves copied status badge markup", async ({ page, context }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await context.grantPermissions(["clipboard-read", "clipboard-write"], {
+        origin: new URL(editor.url).origin,
+      });
+      await page.goto(editor.url);
+      await waitForEditor(page);
+
+      await selectCell(page, "SHIPPED");
+      await page.keyboard.press("Meta+C");
+      await selectCell(page, "PARTIAL");
+      await page.keyboard.press("Meta+V");
+
+      await page.waitForFunction(() =>
+        (window.__edit.target()?.el?.textContent || "").trim() === "SHIPPED");
+      const html = await page.evaluate(() => window.__edit.target().el.innerHTML);
+      expect(html).toContain('class="status-badge shipped"');
+      expect(html).not.toContain("data-edit-id");
+      await expect.poll(() => editor.readFile())
+        .toContain('class="status-badge shipped">SHIPPED</span>');
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("plain-text paste into a badge cell preserves the badge wrapper", async ({ page, context }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await context.grantPermissions(["clipboard-read", "clipboard-write"], {
+        origin: new URL(editor.url).origin,
+      });
+      await page.goto(editor.url);
+      await waitForEditor(page);
+
+      await page.evaluate(() => navigator.clipboard.writeText("SHIPPED"));
+      await selectCell(page, "PARTIAL");
+      await page.keyboard.press("Meta+V");
+
+      await page.waitForFunction(() =>
+        (window.__edit.target()?.el?.textContent || "").trim() === "SHIPPED");
+      const html = await page.evaluate(() => window.__edit.target().el.innerHTML);
+      expect(html).toContain('class="status-badge shipped"');
+      await expect.poll(() => editor.readFile())
+        .toContain('class="status-badge shipped">SHIPPED</span>');
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
   test("Tab and Shift+Tab walk table cells, including from edit mode", async ({ page }) => {
     const editor = await startEditor("table-grid.html");
     try {

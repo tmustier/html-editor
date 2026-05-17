@@ -61,13 +61,80 @@ function selectedPlainText() {
   return (el.innerText || el.textContent || "").replace(/\u00a0/g, " ");
 }
 
+function stripEditIds(root) {
+  if (root.removeAttribute) root.removeAttribute("data-edit-id");
+  if (root.querySelectorAll) {
+    root.querySelectorAll("[data-edit-id]").forEach((el) =>
+      el.removeAttribute("data-edit-id"));
+  }
+  return root;
+}
+
+function sanitizedHtmlFragment(html) {
+  if (!html || !html.trim()) return "";
+  const template = document.createElement("template");
+  template.innerHTML = html;
+  stripEditIds(template.content);
+  template.content.querySelectorAll("script, style, link, meta").forEach((el) => el.remove());
+  return template.innerHTML.trim();
+}
+
 function selectedHtml() {
   const el = state.selected;
   if (!el) return "";
-  return el.innerHTML || selectedPlainText();
+  const clone = stripEditIds(el.cloneNode(true));
+  return (clone.innerHTML || selectedPlainText()).trim();
 }
 
-async function writeClipboardText(text) {
+const STATUS_CLASSES = ["shipped", "partial", "next", "deferred"];
+const STATUS_CLASS_BY_TEXT = new Map([
+  ["SHIPPED", "shipped"],
+  ["V1 SHIPPED", "shipped"],
+  ["PARTIAL", "partial"],
+  ["NEXT", "next"],
+  ["DEFERRED", "deferred"],
+]);
+
+function updateStatusBadgeClass(el, text) {
+  if (!(el && el.classList && el.classList.contains("status-badge"))) return;
+  const mapped = STATUS_CLASS_BY_TEXT.get(String(text || "").trim().toUpperCase());
+  if (!mapped) return;
+  STATUS_CLASSES.forEach((cls) => el.classList.remove(cls));
+  el.classList.add(mapped);
+}
+
+function singleInlineWrapper(el) {
+  if (!el) return null;
+  const elements = Array.from(el.children || []);
+  if (elements.length !== 1) return null;
+  const wrapper = elements[0];
+  const hasOtherText = Array.from(el.childNodes).some((node) =>
+    node !== wrapper && node.nodeType === Node.TEXT_NODE && node.textContent.trim());
+  if (hasOtherText) return null;
+  const display = (window.getComputedStyle(wrapper).display || "").toLowerCase();
+  if (!["inline", "inline-block", "inline-flex"].includes(display)) return null;
+  return wrapper;
+}
+
+function htmlForPlainPastePreservingTarget(el, text) {
+  const wrapper = singleInlineWrapper(el);
+  if (!wrapper) return null;
+  const clone = stripEditIds(el.cloneNode(true));
+  const cloneWrapper = clone.children && clone.children[0];
+  if (!cloneWrapper) return null;
+  cloneWrapper.textContent = text;
+  updateStatusBadgeClass(cloneWrapper, text);
+  return clone.innerHTML;
+}
+
+async function writeClipboardPayload(text, html) {
+  if (navigator.clipboard && navigator.clipboard.write && window.ClipboardItem) {
+    await navigator.clipboard.write([new ClipboardItem({
+      "text/plain": new Blob([text], { type: "text/plain" }),
+      "text/html": new Blob([html || text], { type: "text/html" }),
+    })]);
+    return;
+  }
   if (navigator.clipboard && navigator.clipboard.writeText) {
     await navigator.clipboard.writeText(text);
     return;
@@ -83,23 +150,25 @@ async function writeClipboardText(text) {
 }
 
 async function copySelectionToClipboard() {
-  const text = selectedPlainText();
-  await writeClipboardText(text);
+  await writeClipboardPayload(selectedPlainText(), selectedHtml());
   flash("Copied.", { kind: "success", timeout: 900 });
 }
 
-async function pasteTextIntoSelection(text) {
+async function pasteIntoSelection({ text = "", html = "" } = {}) {
   const target = state.selected && targetFor(state.selected);
   if (!(target && target.kind === "html-text" && target.canEditText)) {
     flash("Select an editable text box or table cell to paste.", { kind: "warning" });
     return;
   }
   const el = target.el;
-  el.innerText = text;
+  const cleanHtml = sanitizedHtmlFragment(html);
+  const nextHtml = cleanHtml || htmlForPlainPastePreservingTarget(el, text);
+  if (nextHtml) el.innerHTML = nextHtml;
+  else el.innerText = text;
   placeBox(dom.selectBox, el);
   placeToolbar(el);
   try {
-    await api.saveText(target.id, text);
+    await api.saveText(target.id, el.innerText || text, nextHtml || undefined);
     flash("Pasted.", { kind: "success" });
   } catch (err) {
     flash("Paste failed: " + err.message, { kind: "error" });
@@ -107,12 +176,31 @@ async function pasteTextIntoSelection(text) {
   }
 }
 
-async function pasteFromClipboard() {
-  if (!(navigator.clipboard && navigator.clipboard.readText)) {
-    flash("Clipboard paste is not available here.", { kind: "warning" });
-    return;
+async function readClipboardPayload() {
+  if (navigator.clipboard && navigator.clipboard.read) {
+    const items = await navigator.clipboard.read();
+    for (const item of items) {
+      const html = item.types.includes("text/html")
+        ? await (await item.getType("text/html")).text()
+        : "";
+      const text = item.types.includes("text/plain")
+        ? await (await item.getType("text/plain")).text()
+        : "";
+      if (html || text) return { html, text };
+    }
   }
-  await pasteTextIntoSelection(await navigator.clipboard.readText());
+  if (navigator.clipboard && navigator.clipboard.readText) {
+    return { text: await navigator.clipboard.readText(), html: "" };
+  }
+  throw new Error("Clipboard paste is not available here.");
+}
+
+async function pasteFromClipboard() {
+  try {
+    await pasteIntoSelection(await readClipboardPayload());
+  } catch (err) {
+    flash(err.message || "Clipboard paste is not available here.", { kind: "warning" });
+  }
 }
 
 export function initEvents() {
@@ -129,9 +217,10 @@ export function initEvents() {
   document.addEventListener("paste", (e) => {
     if (!state.selected || state.editing || isNativeClipboardTarget(e.target)) return;
     const text = e.clipboardData && e.clipboardData.getData("text/plain");
-    if (typeof text !== "string") return;
+    const html = e.clipboardData && e.clipboardData.getData("text/html");
+    if (typeof text !== "string" && typeof html !== "string") return;
     e.preventDefault();
-    void pasteTextIntoSelection(text);
+    void pasteIntoSelection({ text: text || "", html: html || "" });
   }, true);
 
   // --- mouse tracking -----------------------------------------------------
