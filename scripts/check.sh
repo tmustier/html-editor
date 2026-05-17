@@ -12,3 +12,5 @@ tmp_js.write_text(js, encoding="utf-8")
 PY
 node --check "$TMP_JS"
 python3 -m py_compile "$ROOT/serve.py"
+python3 -m py_compile "$ROOT"/server/*.py
+echo "  OK  syntax clean"

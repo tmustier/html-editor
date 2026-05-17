@@ -1,0 +1,286 @@
+"""HTTP routing for the editor server.
+
+The Handler is intentionally thin: each route reads the request body, calls a
+pure function in document.py / history.py / comments.py, and translates the
+return value into a JSON response. All the actual logic lives elsewhere.
+
+Adding a new editor capability is now a 3-step change:
+  1. add the pure function in server/document.py
+  2. add the route in this file's _route_table
+  3. call the new endpoint from the client
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+import time
+from http.server import BaseHTTPRequestHandler
+from pathlib import Path
+from typing import Callable, Optional
+from urllib.parse import urlparse
+
+from . import document
+from .assets import EDITOR_CSS, EDITOR_JS
+from .comments import BRIDGE_FILE, CommentStore
+from .history import History
+
+
+def _inject_overlay(soup) -> str:
+    """Return the HTML string with editor CSS + JS injected at head/body close."""
+    html = str(soup)
+    css_tag = f'<style id="__edit_css">{EDITOR_CSS}</style>'
+    js_tag = (
+        '<script id="__edit_js">'
+        f"window.__EDIT_VERSION = {json.dumps(time.time())};\n"
+        f"{EDITOR_JS}"
+        "</script>"
+    )
+    if "</head>" in html:
+        html = html.replace("</head>", css_tag + "\n</head>", 1)
+    else:
+        html = css_tag + html
+    if "</body>" in html:
+        html = html.replace("</body>", js_tag + "\n</body>", 1)
+    else:
+        html = html + js_tag
+    return html
+
+
+def make_handler(
+    html_path: Path,
+    comments_path: Path,
+) -> type[BaseHTTPRequestHandler]:
+    """Build a Handler class bound to one document. Per-server state lives in
+    closure so we never juggle class-level globals."""
+    history = History(html_path)
+    comment_store = CommentStore(comments_path)
+
+    class Handler(BaseHTTPRequestHandler):
+        # Quiet the default access log; we print our own structured events.
+        def log_message(self, fmt: str, *args) -> None:  # noqa: D401
+            return
+
+        # ---- low-level helpers ----
+        def _send_json(self, code: int, payload) -> None:
+            body = json.dumps(payload).encode("utf-8")
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(body)
+
+        def _read_json(self) -> Optional[dict]:
+            length = int(self.headers.get("Content-Length", "0") or 0)
+            if not length:
+                return {}
+            try:
+                return json.loads(self.rfile.read(length))
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                return None
+
+        def _send_result(self, ok: bool, payload: dict) -> None:
+            if ok:
+                self._send_json(200, payload)
+            else:
+                status = payload.pop("status", 400)
+                self._send_json(status, payload)
+
+        # ---- routes ----
+        def do_GET(self):  # noqa: N802
+            url = urlparse(self.path)
+            if url.path in ("/", "/index.html"):
+                soup = document.ensure_edit_ids(html_path)
+                body = _inject_overlay(soup).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(body)
+                return
+            if url.path == "/comments":
+                self._send_json(200, comment_store.load())
+                return
+            if url.path == "/healthz":
+                self._send_json(200, {
+                    "ok": True,
+                    "file": str(html_path),
+                    "bridge_file": str(BRIDGE_FILE),
+                })
+                return
+            self.send_error(404)
+
+        def do_POST(self):  # noqa: N802
+            url = urlparse(self.path)
+            payload = self._read_json()
+            if payload is None:
+                self._send_json(400, {"error": "invalid JSON"})
+                return
+
+            route = _ROUTES.get(url.path)
+            if route is None:
+                self.send_error(404)
+                return
+            route(self, payload)
+
+        # ---- handlers ----
+        # Each handler:
+        #   1. validates inputs (returns 400 on bad shape)
+        #   2. asks document.py to mutate the soup
+        #   3. on success, takes a history snapshot, writes the file, logs
+        #   4. returns the result as JSON
+        def _save_text(self, payload):
+            edit_id = (payload or {}).get("id")
+            text = (payload or {}).get("text", "")
+            html = (payload or {}).get("html")
+            if not edit_id:
+                self._send_json(400, {"error": "missing id"})
+                return
+            soup = document.load_soup(html_path)
+            ok, result = document.update_text(soup, edit_id, text, html)
+            if not ok:
+                self._send_result(ok, result)
+                return
+            history.remember()
+            document.save_soup(html_path, soup)
+            excerpt = text.strip().replace("\n", " ")[:80]
+            sys.stderr.write(
+                f"[edit] saved text for {edit_id} <{result['tag']}>: "
+                f"{excerpt!r}\n")
+            sys.stderr.flush()
+            self._send_json(200, {"ok": True})
+
+        def _save_svg_labels(self, payload):
+            edit_id = (payload or {}).get("id")
+            lines = (payload or {}).get("lines")
+            if not edit_id or not isinstance(lines, list):
+                self._send_json(400, {"error": "expected id and lines[]"})
+                return
+            soup = document.load_soup(html_path)
+            ok, result = document.update_svg_labels(soup, edit_id, lines)
+            if not ok:
+                self._send_result(ok, result)
+                return
+            history.remember()
+            document.save_soup(html_path, soup)
+            excerpt = " | ".join(str(x).strip() for x in lines)[:120]
+            sys.stderr.write(
+                f"[edit-svg] saved labels for {edit_id}: {excerpt!r}"
+                + (" (formatting partially lost)" if result["formatting_lost"] else "")
+                + "\n")
+            sys.stderr.flush()
+            self._send_json(200, result)
+
+        def _move_element(self, payload):
+            edit_id = (payload or {}).get("id")
+            target_id = (payload or {}).get("target_id")
+            position = (payload or {}).get("position")
+            if not edit_id or not target_id:
+                self._send_json(400, {"error":
+                    "expected id, target_id, position=before|after"})
+                return
+            soup = document.load_soup(html_path)
+            ok, result = document.move_element(soup, edit_id, target_id, position)
+            if not ok:
+                self._send_result(ok, result)
+                return
+            history.remember()
+            document.save_soup(html_path, soup)
+            sys.stderr.write(f"[move] {edit_id} {position} {target_id}\n")
+            sys.stderr.flush()
+            self._send_json(200, result)
+
+        def _move_svg(self, payload):
+            edit_id = (payload or {}).get("id")
+            try:
+                tx = float((payload or {}).get("translate_x", 0))
+                ty = float((payload or {}).get("translate_y", 0))
+            except (TypeError, ValueError):
+                self._send_json(400, {"error":
+                    "translate_x and translate_y must be numbers"})
+                return
+            if not edit_id:
+                self._send_json(400, {"error": "missing id"})
+                return
+            soup = document.load_soup(html_path)
+            ok, result = document.move_svg(soup, edit_id, tx, ty)
+            if not ok:
+                self._send_result(ok, result)
+                return
+            history.remember()
+            document.save_soup(html_path, soup)
+            sys.stderr.write(
+                f"[move-svg] {edit_id} translate({tx:.2f} {ty:.2f})\n")
+            sys.stderr.flush()
+            self._send_json(200, result)
+
+        def _resize_element(self, payload):
+            edit_id = (payload or {}).get("id")
+            if not edit_id:
+                self._send_json(400, {"error": "missing id"})
+                return
+            soup = document.load_soup(html_path)
+            ok, result = document.resize_element(
+                soup, edit_id,
+                width=(payload or {}).get("width"),
+                height=(payload or {}).get("height"),
+                max_width=(payload or {}).get("max_width"),
+                max_height=(payload or {}).get("max_height"),
+            )
+            if not ok:
+                self._send_result(ok, result)
+                return
+            history.remember()
+            document.save_soup(html_path, soup)
+            sys.stderr.write(f"[resize] {edit_id} -> {result['style']!r}\n")
+            sys.stderr.flush()
+            self._send_json(200, result)
+
+        def _undo(self, _payload):
+            if not history.undo():
+                self._send_json(409, {"error": "nothing to undo"})
+                return
+            sys.stderr.write("[history] undo\n")
+            sys.stderr.flush()
+            self._send_json(200, {"ok": True})
+
+        def _redo(self, _payload):
+            if not history.redo():
+                self._send_json(409, {"error": "nothing to redo"})
+                return
+            sys.stderr.write("[history] redo\n")
+            sys.stderr.flush()
+            self._send_json(200, {"ok": True})
+
+        def _add_comment(self, payload):
+            edit_id = (payload or {}).get("id")
+            comment = ((payload or {}).get("comment") or "").strip()
+            excerpt = ((payload or {}).get("excerpt") or "")[:240]
+            tag = (payload or {}).get("tag") or ""
+            if not edit_id or not comment:
+                self._send_json(400, {"error": "missing id or comment"})
+                return
+            entry = comment_store.add(edit_id, tag, comment, excerpt, html_path)
+            sys.stderr.write(
+                f"[comment] {entry['timestamp']}  {edit_id} <{tag}>  "
+                f'"{comment}"  (on: {excerpt!r})\n')
+            sys.stderr.flush()
+            self._send_json(200, {
+                "ok": True, "entry": entry, "bridge": str(BRIDGE_FILE),
+            })
+
+    # POST route table — the canonical list of editor capabilities.
+    _ROUTES: dict[str, Callable] = {
+        "/save-text":        Handler._save_text,
+        "/save-svg-labels":  Handler._save_svg_labels,
+        "/move-element":     Handler._move_element,
+        "/move-svg":         Handler._move_svg,
+        "/resize-element":   Handler._resize_element,
+        "/undo":             Handler._undo,
+        "/redo":             Handler._redo,
+        "/comment":          Handler._add_comment,
+    }
+    return Handler
