@@ -4,6 +4,12 @@ All notable changes to `html-editor` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project follows
 [Semantic Versioning](https://semver.org/).
 
+## 0.1.1 — 2026-05-17
+
+### Added
+
+- Agent Skill bundled with the package (`skills/html-editor/SKILL.md`). Pi sessions with `html-editor` installed will surface the editor to agents automatically when generating an HTML/SVG document, dashboard, report, mockup, or one-pager the user will iterate on.
+
 ## 0.1.0 — 2026-05-17
 
 Initial tagged release of the local HTML collaboration editor.

@@ -17,6 +17,7 @@ There is also an optional Pi extension (`extensions/html-editor-comments.ts`) th
 - `client/*.js` — native ES modules, no bundler, no TypeScript. `main.js` is the entrypoint; the rest are pulled via `import`.
 - `styles/*.css` — concatenated in filename order; served at `/__editor/main.css`.
 - `extensions/html-editor-comments.ts` — Pi extension; do not import editor code from it.
+- `skills/html-editor/SKILL.md` — short Agent Skill that makes the editor discoverable to Pi-loaded agents. Keep it short; if more detail is needed, agents should read the README/code.
 - `tests/` — `unittest` for `server/`; Playwright e2e in `tests/e2e/`.
 - `scripts/check.sh`, `scripts/test.sh` — the only test entrypoints you should use.
 

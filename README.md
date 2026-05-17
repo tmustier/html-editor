@@ -93,6 +93,10 @@ Avoid loading two copies of the extension. If you previously copied `html-editor
 
 The legacy shared bridge file `/tmp/html-editor-comments.jsonl` is intentionally unused now — comments are never broadcast to every running Pi session.
 
+### Agent discoverability
+
+The package also ships an Agent Skill (`skills/html-editor/SKILL.md`). Once installed, Pi-loaded agents see the editor as an option whenever they generate an HTML or SVG document the user is going to iterate on, and they'll launch the server themselves and share the URL with you.
+
 ## Run / develop / test
 
 ```bash
@@ -120,6 +124,7 @@ The server injects a small overlay (one CSS link + one ES module script tag) int
 - `client/*.js` — native ES modules served at `/__editor/client/<name>.js`; only `main.js` is referenced from the host page.
 - `styles/*.css` — overlay styles concatenated in filename order and served at `/__editor/main.css`.
 - `extensions/html-editor-comments.ts` — optional Pi extension (the session bridge).
+- `skills/html-editor/SKILL.md` — Agent Skill that makes the editor discoverable to Pi-loaded agents.
 - `tests/` — stdlib `unittest` for `server/` plus Playwright e2e in `tests/e2e/`.
 
 ### Client modules
