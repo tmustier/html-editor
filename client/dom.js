@@ -62,6 +62,7 @@ export function initDom() {
           <tr><td><kbd>Drag edge</kbd></td><td>Resize HTML element (E / S / SE handles)</td></tr>
           <tr><td><kbd>F2</kbd> / <kbd>Enter</kbd> / <kbd>E</kbd></td><td>Edit selected text/label</td></tr>
           <tr><td><kbd>C</kbd></td><td>Add a comment</td></tr>
+          <tr><td><kbd>Cmd</kbd><kbd>C</kbd> / <kbd>Cmd</kbd><kbd>V</kbd></td><td>Copy / paste the selected text box or table cell</td></tr>
           <tr><td><kbd>Drag border</kbd> / <kbd>Drag handle</kbd></td><td>Reorder HTML or reposition diagram item</td></tr>
           <tr><td><kbd>Cmd</kbd><kbd>Z</kbd></td><td>Undo last saved edit or move</td></tr>
           <tr><td><kbd>Cmd</kbd><kbd>Y</kbd> / <kbd>Cmd</kbd><kbd>Shift</kbd><kbd>Z</kbd></td><td>Redo</td></tr>

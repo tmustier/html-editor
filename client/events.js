@@ -47,7 +47,93 @@ async function performHistory(action) {
   }
 }
 
+function isNativeClipboardTarget(el) {
+  return !!(el && (
+    el.tagName === "TEXTAREA"
+    || el.tagName === "INPUT"
+    || (el.getAttribute && el.getAttribute("contenteditable") === "true")
+  ));
+}
+
+function selectedPlainText() {
+  const el = state.selected;
+  if (!el) return "";
+  return (el.innerText || el.textContent || "").replace(/\u00a0/g, " ");
+}
+
+function selectedHtml() {
+  const el = state.selected;
+  if (!el) return "";
+  return el.innerHTML || selectedPlainText();
+}
+
+async function writeClipboardText(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.setAttribute("readonly", "");
+  ta.style.cssText = "position:fixed;left:-9999px;top:-9999px";
+  document.body.appendChild(ta);
+  ta.select();
+  document.execCommand("copy");
+  ta.remove();
+}
+
+async function copySelectionToClipboard() {
+  const text = selectedPlainText();
+  await writeClipboardText(text);
+  flash("Copied.", { kind: "success", timeout: 900 });
+}
+
+async function pasteTextIntoSelection(text) {
+  const target = state.selected && targetFor(state.selected);
+  if (!(target && target.kind === "html-text" && target.canEditText)) {
+    flash("Select an editable text box or table cell to paste.", { kind: "warning" });
+    return;
+  }
+  const el = target.el;
+  el.innerText = text;
+  placeBox(dom.selectBox, el);
+  placeToolbar(el);
+  try {
+    await api.saveText(target.id, text);
+    flash("Pasted.", { kind: "success" });
+  } catch (err) {
+    flash("Paste failed: " + err.message, { kind: "error" });
+    reloadAfterMutation({ delay: 800 });
+  }
+}
+
+async function pasteFromClipboard() {
+  if (!(navigator.clipboard && navigator.clipboard.readText)) {
+    flash("Clipboard paste is not available here.", { kind: "warning" });
+    return;
+  }
+  await pasteTextIntoSelection(await navigator.clipboard.readText());
+}
+
 export function initEvents() {
+  // --- clipboard ----------------------------------------------------------
+  document.addEventListener("copy", (e) => {
+    if (!state.selected || state.editing || isNativeClipboardTarget(e.target)) return;
+    if (!e.clipboardData) return;
+    e.preventDefault();
+    e.clipboardData.setData("text/plain", selectedPlainText());
+    e.clipboardData.setData("text/html", selectedHtml());
+    flash("Copied.", { kind: "success", timeout: 900 });
+  }, true);
+
+  document.addEventListener("paste", (e) => {
+    if (!state.selected || state.editing || isNativeClipboardTarget(e.target)) return;
+    const text = e.clipboardData && e.clipboardData.getData("text/plain");
+    if (typeof text !== "string") return;
+    e.preventDefault();
+    void pasteTextIntoSelection(text);
+  }, true);
+
   // --- mouse tracking -----------------------------------------------------
   document.addEventListener("mousemove", (e) => {
     if (state.editing || state.dragging) return;
@@ -152,6 +238,15 @@ export function initEvents() {
           flash(e.shiftKey ? "No previous grid cell." : "No next grid cell.", { kind: "warning" });
         }
       })();
+      return;
+    }
+
+    const isClipboardKey = (e.metaKey || e.ctrlKey) && !e.altKey
+      && (key === "c" || key === "v");
+    if (isClipboardKey && state.selected && !inEditableField && !state.editing) {
+      e.preventDefault();
+      e.stopPropagation();
+      void (key === "c" ? copySelectionToClipboard() : pasteFromClipboard());
       return;
     }
 

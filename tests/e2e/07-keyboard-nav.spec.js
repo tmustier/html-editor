@@ -106,6 +106,28 @@ test.describe("keyboard navigation + adversarial flows", () => {
     }
   });
 
+  test("Cmd+C and Cmd+V copy/paste selected table cells and persist", async ({ page, context }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await context.grantPermissions(["clipboard-read", "clipboard-write"], {
+        origin: new URL(editor.url).origin,
+      });
+      await page.goto(editor.url);
+      await waitForEditor(page);
+
+      await selectCell(page, "Alpha");
+      await page.keyboard.press("Meta+C");
+      await selectCell(page, "Epsilon");
+      await page.keyboard.press("Meta+V");
+
+      await page.waitForFunction(() =>
+        (window.__edit.target()?.el?.textContent || "").trim() === "Alpha");
+      await expect.poll(() => editor.readFile()).toContain(">Alpha</td><td data-edit-id=\"e11\">Zeta");
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
   test("Tab and Shift+Tab walk table cells, including from edit mode", async ({ page }) => {
     const editor = await startEditor("table-grid.html");
     try {
