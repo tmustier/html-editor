@@ -42,7 +42,7 @@ Always run `./scripts/check.sh` after edits; run `./scripts/test.sh` before comm
 
 ## Things to avoid
 
-- Do **not** make tests assume `/private/tmp/v1-architecture.html` or any specific user file. Tests must build their own HTML fixtures in `tests/e2e/fixtures/` or inline in `tests/test_document.py`.
+- Do **not** make tests depend on any specific user-supplied HTML file or absolute path on the developer's machine. Tests must build their own fixtures in `tests/e2e/fixtures/` or inline in `tests/test_document.py`.
 - Do **not** reintroduce the shared `/tmp/html-editor-comments.jsonl` broadcast file as a fallback. Per-session bridges only. The `comments_bridge=none` mode is the no-pi default.
 - Do **not** mutate the BeautifulSoup tree outside `server/document.py`.
 - Do **not** add a JS bundler, transpiler, or framework to the client. Native ES modules only.

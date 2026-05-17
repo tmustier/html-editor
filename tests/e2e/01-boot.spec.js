@@ -24,11 +24,11 @@ test.describe("editor boots", () => {
       expect(ids).toBeGreaterThan(0);
 
       // Debug API is exposed.
-      const apiKeys = await page.evaluate(() =>
+      const apiMethods = await page.evaluate(() =>
         window.__edit ? Object.keys(window.__edit).sort() : null);
-      expect(apiKeys).toContain("select");
-      expect(apiKeys).toContain("deselect");
-      expect(apiKeys).toContain("undo");
+      expect(apiMethods).toContain("select");
+      expect(apiMethods).toContain("deselect");
+      expect(apiMethods).toContain("undo");
     } finally {
       await editor.cleanup();
     }
