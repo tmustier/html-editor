@@ -24,6 +24,49 @@ with `--comments-bridge none`.
 Do not use the historical shared `/tmp/html-editor-comments.jsonl` bridge unless
 you deliberately want broadcast-style legacy behaviour.
 
+## Pi integration / install
+
+This repository is also a Pi package. Installing it loads the optional
+`html-editor-comments` extension, which creates a per-session
+`HTML_EDITOR_COMMENTS_BRIDGE` path and injects comments from the browser back
+into the Pi session that launched the editor server.
+
+Install from GitHub:
+
+```bash
+pi install git:github.com/tmustier/pi-html
+# Then /reload in any already-running Pi session.
+```
+
+Try it for one Pi process without changing settings:
+
+```bash
+pi -e git:github.com/tmustier/pi-html
+```
+
+Install from a local checkout while developing:
+
+```bash
+pi install /path/to/pi-html
+# or, project-scoped:
+pi install -l /path/to/pi-html
+```
+
+After install, launch the editor from inside Pi so the server inherits the
+session-scoped bridge environment variable:
+
+```bash
+python3 /path/to/pi-html/serve.py path/to/some.html --port 8765 --no-open
+```
+
+If you installed from GitHub and do not have a separate checkout, Pi clones the
+package under `~/.pi/agent/git/github.com/tmustier/pi-html/`, so the server can
+be launched from there.
+
+Avoid loading two copies of the extension at once. If you previously copied
+`html-editor-comments.ts` into `~/.pi/agent/extensions/`, either remove that
+copy or do not also install this package globally.
+
 ## Structure
 
 - `serve.py` — 14-line launcher pointing at `server.app:main`.

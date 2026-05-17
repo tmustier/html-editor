@@ -1,8 +1,8 @@
 {
-  "name": "html-collab-editor-tests",
+  "name": "pi-html",
   "private": true,
   "type": "module",
-  "description": "Playwright e2e tests for the html-collab-editor. Not part of the editor itself.",
+  "description": "Local HTML collaboration editor with optional Pi session comment bridge.",
   "scripts": {
     "test": "./scripts/test.sh",
     "test:fast": "./scripts/test.sh --fast",
@@ -10,5 +10,25 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.49.1"
+  },
+  "keywords": [
+    "pi-package",
+    "pi",
+    "html",
+    "editor",
+    "collaboration"
+  ],
+  "pi": {
+    "extensions": [
+      "./extensions/html-editor-comments.ts"
+    ]
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-coding-agent": {
+      "optional": true
+    }
   }
 }
