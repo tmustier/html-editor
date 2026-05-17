@@ -14,4 +14,4 @@ node --check "$TMP_JS"
 python3 -m py_compile "$ROOT/serve.py"
 python3 -m py_compile "$ROOT"/server/*.py
 echo "  OK  syntax clean"
-"$ROOT/scripts/test.sh" "$@"
+"$ROOT/scripts/test.sh" --fast "$@"

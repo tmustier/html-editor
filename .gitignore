@@ -1,5 +1,7 @@
 logs/
 __pycache__/
 *.pyc
-node_modules/
 .venv/
+node_modules/
+playwright-report/
+test-results/

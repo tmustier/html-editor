@@ -63,11 +63,17 @@ function startHtmlTextEdit(el, clickX, clickY) {
   el.focus();
   placeCaretFromClickOrEnd(el, clickX, clickY);
 
+  let finished = false;
   const finish = async (commit) => {
-    el.removeAttribute("contenteditable");
-    el.classList.remove("__edit_editing");
+    // Removing contenteditable can itself fire blur. Unhook listeners and guard
+    // re-entry first so Escape/Cmd+Enter cannot recursively commit and create a
+    // duplicate history snapshot.
+    if (finished) return;
+    finished = true;
     el.removeEventListener("blur", onBlur, true);
     el.removeEventListener("keydown", onKey, true);
+    el.removeAttribute("contenteditable");
+    el.classList.remove("__edit_editing");
     state.editing = false;
     if (!commit) {
       if (hadChildren) el.innerHTML = originalHTML;

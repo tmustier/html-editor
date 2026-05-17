@@ -1,0 +1,146 @@
+import { test, expect } from "@playwright/test";
+import { startEditor, waitForEditor } from "./helpers.js";
+
+test.describe("keyboard navigation + adversarial flows", () => {
+  test("Option+Arrow walks siblings + into children", async ({ page }) => {
+    const editor = await startEditor("deep-nesting.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+
+      // Select an article.
+      const firstArticleId = await page.locator('article[data-edit-id]').first()
+        .getAttribute("data-edit-id");
+      await page.evaluate((id) => {
+        window.__edit.select(document.querySelector(`[data-edit-id="${id}"]`));
+      }, firstArticleId);
+
+      // Option+Down → first editable child of the article.
+      await page.keyboard.press("Alt+ArrowDown");
+      const child = await page.evaluate(() => window.__edit.target().id);
+      expect(child).not.toBe(firstArticleId);
+      // Should be the h2 or the first p.
+      const childTag = await page.locator(`[data-edit-id="${child}"]`)
+        .evaluate((el) => el.tagName.toLowerCase());
+      expect(["h2", "p"]).toContain(childTag);
+
+      // Option+Up returns to a parent.
+      await page.keyboard.press("Alt+ArrowUp");
+      const parent = await page.evaluate(() => window.__edit.target().id);
+      expect(parent).toBe(firstArticleId);
+
+      // Option+Right moves to the next article.
+      await page.keyboard.press("Alt+ArrowRight");
+      const next = await page.evaluate(() => window.__edit.target().id);
+      expect(next).not.toBe(firstArticleId);
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("Escape cascades: comment → help → deselect", async ({ page }) => {
+    const editor = await startEditor("rich-text.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+
+      const id = await page.locator('p:has-text("Plain paragraph one.")').first()
+        .getAttribute("data-edit-id");
+      await page.evaluate((id) => {
+        window.__edit.select(document.querySelector(`[data-edit-id="${id}"]`));
+      }, id);
+
+      // Open help; Esc should close help.
+      await page.keyboard.press("?");
+      await expect(page.locator("#__edit_help")).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(page.locator("#__edit_help")).toBeHidden();
+
+      // Open comment box; Esc should close it (not deselect).
+      await page.evaluate(() => window.__edit.startComment());
+      await expect(page.locator("#__edit_commentbox")).toBeVisible();
+      await page.locator("#__edit_commentbox textarea").focus();
+      await page.keyboard.press("Escape");
+      await expect(page.locator("#__edit_commentbox")).toBeHidden();
+      const stillSelected = await page.evaluate(() =>
+        !!window.__edit.target());
+      expect(stillSelected).toBe(true);
+
+      // Esc again deselects.
+      await page.keyboard.press("Escape");
+      const cleared = await page.evaluate(() =>
+        window.__edit.target() === null);
+      expect(cleared).toBe(true);
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("clicking outside any editable deselects", async ({ page }) => {
+    const editor = await startEditor("minimal.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+
+      const id = await page.locator('p:has-text("hello world")')
+        .getAttribute("data-edit-id");
+      await page.evaluate((id) => {
+        window.__edit.select(document.querySelector(`[data-edit-id="${id}"]`));
+      }, id);
+      expect(await page.evaluate(() => !!window.__edit.target())).toBe(true);
+
+      // Click far from any p — on the document/body itself.
+      await page.mouse.click(5, 5);
+      await page.waitForTimeout(50);
+      expect(await page.evaluate(() => window.__edit.target() === null)).toBe(true);
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("rapid double-click doesn't double-enter edit (no error)", async ({ page }) => {
+    const editor = await startEditor("rich-text.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+
+      const errors = [];
+      page.on("pageerror", (e) => errors.push(e.message));
+
+      const id = await page.locator('p:has-text("Plain paragraph one.")').first()
+        .getAttribute("data-edit-id");
+      const el = page.locator(`[data-edit-id="${id}"]`);
+      await el.dblclick();
+      await el.dblclick();
+      await page.waitForTimeout(150);
+
+      // Editor still functional.
+      const editing = await page.evaluate(() => {
+        const el = document.activeElement;
+        return el && el.getAttribute("contenteditable") === "true";
+      });
+      expect(editing).toBe(true);
+      expect(errors).toEqual([]);
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("the help table mentions all the visible keyboard shortcuts", async ({ page }) => {
+    const editor = await startEditor("minimal.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+
+      await page.keyboard.press("?");
+      const help = page.locator("#__edit_help");
+      await expect(help).toBeVisible();
+      await expect(help).toContainText("Cmd");
+      await expect(help).toContainText("Esc");
+      await expect(help).toContainText("Option");
+      await expect(help).toContainText("Enter");
+    } finally {
+      await editor.cleanup();
+    }
+  });
+});

@@ -1,7 +1,7 @@
 """Tests for server/document.py — the pure mutation surface.
 
 Every test builds a small inline HTML/SVG fragment in the test body itself
-(never reads path/to/some.html) so the suite documents the
+(never reads the user's real scratch document) so the suite documents the
 behaviour structurally, not by accident of one particular file's shape.
 """
 
