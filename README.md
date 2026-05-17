@@ -1,6 +1,6 @@
-# pi-html
+# html-editor
 
-A small local editor for any standalone HTML file. Run a Python server, open the page in your browser, and click-to-edit the HTML in place — text, table cells, diagram labels, drag-to-reorder, resize, undo/redo. Edits are written straight back to the source file.
+A little local editor for HTML your agent makes. Run a Python server, open the page in your browser, and click-to-edit the HTML in place — text, table cells, diagram labels, drag-to-reorder, resize, undo/redo. Edits are written straight back to the source file.
 
 Optionally pairs with [Pi](https://github.com/earendil-works/pi-coding-agent) so in-browser comments are delivered back to the same Pi session that launched the editor.
 
@@ -11,8 +11,8 @@ No build step, no framework. Pure Python `http.server` + native ES modules.
 Requirements: Python 3.10+, `beautifulsoup4`, a modern browser. For tests: Node 18+ and Playwright.
 
 ```bash
-git clone https://github.com/tmustier/pi-html
-cd pi-html
+git clone https://github.com/tmustier/html-editor
+cd html-editor
 pip install beautifulsoup4   # or use your preferred env
 ```
 
@@ -59,27 +59,27 @@ Comments are stored next to the HTML file in `<file>.comments.json`.
 
 ## Pi integration
 
-`pi-html` is also a Pi package. Installing it loads the optional `html-editor-comments` extension, which gives every Pi session its own `HTML_EDITOR_COMMENTS_BRIDGE` path. Any editor server launched from that Pi session reads the env var automatically, and in-browser comments are delivered back into that same session as user messages.
+`html-editor` is also a Pi package. Installing it loads the optional `html-editor-comments` extension, which gives every Pi session its own `HTML_EDITOR_COMMENTS_BRIDGE` path. Any editor server launched from that Pi session reads the env var automatically, and in-browser comments are delivered back into that same session as user messages.
 
 ```bash
 # Install from GitHub
-pi install git:github.com/tmustier/pi-html
+pi install git:github.com/tmustier/html-editor
 
 # Or try it for one Pi process only
-pi -e git:github.com/tmustier/pi-html
+pi -e git:github.com/tmustier/html-editor
 
 # Or from a local checkout
-pi install /path/to/pi-html
-# project-scoped variant: pi install -l /path/to/pi-html
+pi install /path/to/html-editor
+# project-scoped variant: pi install -l /path/to/html-editor
 ```
 
 After install, launch the editor from inside the Pi session so the server inherits the bridge env var:
 
 ```bash
-python3 /path/to/pi-html/serve.py path/to/some.html --port 8765 --no-open
+python3 /path/to/html-editor/serve.py path/to/some.html --port 8765 --no-open
 ```
 
-If you installed via `pi install git:…`, Pi clones the repo to `~/.pi/agent/git/github.com/tmustier/pi-html/` and you can launch `serve.py` from there.
+If you installed via `pi install git:…`, Pi clones the repo to `~/.pi/agent/git/github.com/tmustier/html-editor/` and you can launch `serve.py` from there.
 
 If you have not installed the package, you can still set the bridge manually:
 

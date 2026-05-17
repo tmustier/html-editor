@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to `pi-html` are documented here. The format follows
+All notable changes to `html-editor` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project follows
 [Semantic Versioning](https://semver.org/).
 
@@ -65,7 +65,7 @@ Initial tagged release of the local HTML collaboration editor.
 - New `extensions/html-editor-comments.ts` packaged as part of the repo.
 - `package.json` declares a Pi package manifest:
   `"pi": { "extensions": ["./extensions/html-editor-comments.ts"] }`.
-- Installable with `pi install git:github.com/tmustier/pi-html` (or local
+- Installable with `pi install git:github.com/tmustier/html-editor` (or local
   paths). The extension exports a per-session bridge path so any editor
   server launched from that Pi session receives in-browser comments
   automatically as user messages.

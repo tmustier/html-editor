@@ -1,5 +1,5 @@
 {
-  "name": "pi-html",
+  "name": "html-editor",
   "private": true,
   "type": "module",
   "description": "Local HTML collaboration editor with optional Pi session comment bridge.",
@@ -35,6 +35,6 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/tmustier/pi-html.git"
+    "url": "git+https://github.com/tmustier/html-editor.git"
   }
 }
