@@ -17,6 +17,7 @@ export const isInsideSvg = (el) => !!(el && el.closest && el.closest("svg"));
 export const isSvgGroup = (el) => tagName(el) === "g" && isInsideSvg(el);
 export const isSvgText  = (el) => tagName(el) === "text" && isInsideSvg(el);
 export const hasChildElements = (el) => !!(el && el.querySelector && el.querySelector("*"));
+const isInlineTextTag = (el) => INLINE_TEXT_TAGS.has(tagName(el));
 
 export function isEditable(el) {
   if (!el || !el.getAttribute || !el.getAttribute("data-edit-id")) return false;
@@ -108,6 +109,20 @@ export function currentTarget() {
 
 // --- DOM walks ------------------------------------------------------------
 
+function textEditableRootFromHit(target) {
+  if (!target || isInsideSvg(target)) return null;
+  let el = target.nodeType === Node.ELEMENT_NODE ? target : target.parentElement;
+  let cur = el && el.closest ? el.closest("[data-edit-id]") : null;
+  let best = null;
+  while (cur && cur !== document.body && cur !== document.documentElement) {
+    if (isTextEditableElement(cur) && !isInlineTextTag(cur)) best = cur;
+    cur = cur.parentElement && cur.parentElement.closest
+      ? cur.parentElement.closest("[data-edit-id]")
+      : null;
+  }
+  return best;
+}
+
 export function editableFrom(target) {
   if (isInsideSvg(target)) {
     // Prefer a labelled <g> wrapping the hit; otherwise allow direct editing
@@ -118,6 +133,14 @@ export function editableFrom(target) {
     const text = target.closest && target.closest("text[data-edit-id]");
     if (text && isEditable(text)) return text;
   }
+
+  // Inline formatting/code runs are not independent text boxes. If a click
+  // lands on <code>, <b>, <span>, etc. inside a larger editable text block,
+  // edit/select the containing text box so arrow keys can move across the
+  // style boundary like PowerPoint/Keynote text.
+  const textRoot = textEditableRootFromHit(target);
+  if (textRoot) return textRoot;
+
   let el = target;
   while (el && !isEditable(el)) el = el.parentElement;
   if (!el || el === document.body || el === document.documentElement) return null;
@@ -152,7 +175,9 @@ export function firstEditableChild(el) {
     if (texts.length) return texts[0];
     return null;
   }
-  return Array.from(el.querySelectorAll("[data-edit-id]")).find(isEditable) || null;
+  return Array.from(el.querySelectorAll("[data-edit-id]")).find((child) =>
+    isEditable(child) && !(isInlineTextTag(child) && textEditableRootFromHit(child) === el)
+  ) || null;
 }
 
 // --- breadcrumbs / labels -------------------------------------------------
@@ -213,7 +238,10 @@ export function placeBox(box, el) {
   box.style.width = r.width + "px";
   box.style.height = r.height + "px";
   if (box === dom.selectBox) {
+    const target = targetFor(el);
     box.dataset.resizable = isHtmlResizable(el) ? "true" : "false";
+    box.dataset.canMove = target && target.canMove ? "true" : "false";
+    box.dataset.editing = state.editing ? "true" : "false";
   }
 }
 
@@ -222,23 +250,33 @@ export function placeToolbar(el) {
   const r = rectOf(el);
   dom.toolbar.hidden = false;
   const target = targetFor(el);
-  dom.pathEl.innerHTML = breadcrumb(el);
-  dom.editBtn.disabled = !(target && target.canEditText);
-  dom.editBtn.title = target && (target.kind === "svg-item" || target.kind === "svg-text")
-    ? "Edit this diagram label (Enter or double-click)"
-    : (dom.editBtn.disabled
-        ? "Structural component selected. Select text inside it to edit."
-        : "Edit text (Enter or double-click)");
-  dom.dragBtn.disabled = !(target && target.canMove);
-  dom.dragBtn.title = target && target.moveMode === "spatial"
-    ? "Drag to reposition this diagram item"
-    : (dom.dragBtn.disabled
-        ? "This selected item cannot be moved directly"
-        : "Drag to move this component before/after another");
-  dom.navParent.disabled = !editableAncestor(el.parentElement);
-  dom.navChild.disabled  = !firstEditableChild(el);
-  dom.navPrev.disabled   = !prevEditableSibling(el);
-  dom.navNext.disabled   = !nextEditableSibling(el);
+  const isEditing = !!state.editing;
+  dom.toolbar.dataset.mode = isEditing ? "editing" : "selected";
+  dom.pathEl.innerHTML = breadcrumb(el) + (isEditing ? '<span class="editing">editing</span>' : "");
+  dom.editBtn.disabled = isEditing || !(target && target.canEditText);
+  dom.editBtn.title = isEditing
+    ? "Already editing — Cmd+Enter saves, Esc cancels"
+    : (target && (target.kind === "svg-item" || target.kind === "svg-text")
+      ? "Edit this diagram label (F2, Enter, or double-click)"
+      : (dom.editBtn.disabled
+          ? "Structural component selected. Select text inside it to edit."
+          : "Edit text (F2, Enter, or double-click)"));
+  dom.commentBtn.disabled = isEditing;
+  dom.dragBtn.disabled = isEditing || !(target && target.canMove);
+  dom.dragBtn.title = isEditing
+    ? "Finish editing before moving this component"
+    : (target && target.moveMode === "spatial"
+      ? "Drag to reposition this diagram item"
+      : (dom.dragBtn.disabled
+          ? "This selected item cannot be moved directly"
+          : "Drag the toolbar handle or selection border to move"));
+  dom.undoBtn.disabled = isEditing;
+  dom.redoBtn.disabled = isEditing;
+  dom.closeBtn.disabled = isEditing;
+  dom.navParent.disabled = isEditing || !editableAncestor(el.parentElement);
+  dom.navChild.disabled  = isEditing || !firstEditableChild(el);
+  dom.navPrev.disabled   = isEditing || !prevEditableSibling(el);
+  dom.navNext.disabled   = isEditing || !nextEditableSibling(el);
 
   const tb = dom.toolbar.getBoundingClientRect();
   let top = r.top - tb.height - 6;

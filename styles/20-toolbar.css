@@ -50,4 +50,16 @@
 }
 #__edit_toolbar .path .cur { color: #fff; font-weight: 600; }
 #__edit_toolbar .path .arrow { color: #6b7280; padding: 0 2px; }
+#__edit_toolbar .path .editing {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(245, 158, 11, 0.22);
+  color: #fbbf24;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+#__edit_toolbar[data-mode="editing"] { box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.55), 0 6px 20px rgba(0, 0, 0, 0.28); }
 

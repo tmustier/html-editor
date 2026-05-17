@@ -15,6 +15,61 @@ test.describe("HTML inline text editing", () => {
       await page.locator(`[data-edit-id="${before}"]`).click();
       await expect(page.locator(`[data-edit-id="${before}"]`))
         .toHaveAttribute("contenteditable", "true");
+      await expect(page.locator("#__edit_toolbar")).toBeVisible();
+      await expect(page.locator("#__edit_toolbar .editing")).toHaveText("editing");
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("clicking inline code edits the containing text box", async ({ page }) => {
+    const editor = await startEditor("rich-text.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+
+      const parentId = await page.locator('p:has-text("mixed paragraph")')
+        .getAttribute("data-edit-id");
+      const codeId = await page.locator('code:has-text("code()")')
+        .getAttribute("data-edit-id");
+      expect(parentId).toBeTruthy();
+      expect(codeId).toBeTruthy();
+      expect(parentId).not.toBe(codeId);
+
+      await page.locator('code:has-text("code()")').click();
+
+      const active = await page.evaluate(() => ({
+        selectedId: window.__edit.target().id,
+        activeId: document.activeElement.getAttribute("data-edit-id"),
+        activeTag: document.activeElement.tagName.toLowerCase(),
+      }));
+      expect(active.selectedId).toBe(parentId);
+      expect(active.activeId).toBe(parentId);
+      expect(active.activeTag).toBe("p");
+      await expect(page.locator(`[data-edit-id="${parentId}"]`))
+        .toHaveAttribute("contenteditable", "true");
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("F2 edits the selected text box", async ({ page }) => {
+    const editor = await startEditor("rich-text.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+
+      const id = await page.locator('p:has-text("Plain paragraph one.")').first()
+        .getAttribute("data-edit-id");
+      await page.evaluate((id) => {
+        window.__edit.select(document.querySelector(`[data-edit-id="${id}"]`));
+      }, id);
+      await page.keyboard.press("F2");
+
+      await expect(page.locator(`[data-edit-id="${id}"]`))
+        .toHaveAttribute("contenteditable", "true");
+      await expect(page.locator("#__edit_toolbar")).toBeVisible();
+      await expect(page.locator("#__edit_toolbar .editing")).toHaveText("editing");
     } finally {
       await editor.cleanup();
     }
@@ -45,6 +100,8 @@ test.describe("HTML inline text editing", () => {
       const onDisk = editor.readFile();
       expect(onDisk).toContain("REPLACED VIA EDITOR");
       expect(onDisk).not.toContain("Plain paragraph one.");
+      expect(onDisk).not.toContain("__edit_pulse");
+      await expect(el).not.toHaveClass(/__edit_pulse/);
     } finally {
       await editor.cleanup();
     }

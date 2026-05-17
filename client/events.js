@@ -157,7 +157,7 @@ export function initEvents() {
 
     if (!state.selected) return;
 
-    if (e.key === "Enter" || key === "e") {
+    if (e.key === "F2" || e.key === "Enter" || key === "e") {
       e.preventDefault(); startEdit(); return;
     }
     if (key === "c") {
@@ -176,8 +176,12 @@ export function initEvents() {
 
   dom.selectBox.addEventListener("mousedown", (e) => {
     const handle = e.target && e.target.closest && e.target.closest("[data-handle]");
-    if (!handle) return;
-    beginResize(handle.dataset.handle, e);
+    if (handle) {
+      beginResize(handle.dataset.handle, e);
+      return;
+    }
+    const border = e.target && e.target.closest && e.target.closest("[data-border-drag]");
+    if (border) beginDrag(e);
   });
 
   dom.toolbar.addEventListener("click", (e) => {

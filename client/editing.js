@@ -55,7 +55,8 @@ function startHtmlTextEdit(el, clickX, clickY) {
   const hadChildren = hasChildElements(el);
 
   state.editing = true;
-  dom.toolbar.hidden = true;
+  placeBox(dom.selectBox, el);
+  placeToolbar(el);
   dom.hoverBox.style.display = "none";
   dom.commentBox.hidden = true;
   dom.svgEditor.hidden = true;
@@ -86,8 +87,6 @@ function startHtmlTextEdit(el, clickX, clickY) {
       try {
         await api.saveText(id, text, html);
         flash("Saved.", { kind: "success" });
-        el.classList.add("__edit_pulse");
-        setTimeout(() => el.classList.remove("__edit_pulse"), 700);
       } catch (err) {
         flash("Save failed: " + err.message, { kind: "error" });
       }
@@ -260,6 +259,7 @@ function startSvgLabelEdit(preferredSource, clickX, clickY) {
     (node) => node.querySelector && node.querySelector("tspan"));
 
   state.editing = true;
+  placeBox(dom.selectBox, el);
   state.svgEditing = {
     el,
     id: target.id,
@@ -293,7 +293,7 @@ function startSvgLabelEdit(preferredSource, clickX, clickY) {
   ["keyup", "select"].forEach((eventName) =>
     input.addEventListener(eventName, () => positionSvgCaret(state.svgEditing)));
 
-  dom.toolbar.hidden = true;
+  placeToolbar(el);
   dom.hoverBox.style.display = "none";
   dom.commentBox.hidden = true;
   dom.svgEditor.hidden = false;
@@ -337,8 +337,6 @@ export async function finishSvgLabelEdit(commit) {
     } else {
       flash("Saved diagram label.", { kind: "success" });
     }
-    s.el.classList.add("__edit_pulse");
-    setTimeout(() => s.el.classList.remove("__edit_pulse"), 700);
     // Live preview during typing collapses tspans. If the file still holds
     // tspan styling, reload so the rendered SVG matches the file. Skip when
     // no inline markup was at risk (pure-text <text>) to keep editing snappy.

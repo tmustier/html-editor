@@ -19,6 +19,10 @@ export function initDom() {
   root.innerHTML = `
     <div id="__edit_hover"></div>
     <div id="__edit_select">
+      <div class="__edit_border_drag bd-n" data-border-drag="n" title="Drag border to move"></div>
+      <div class="__edit_border_drag bd-e" data-border-drag="e" title="Drag border to move"></div>
+      <div class="__edit_border_drag bd-s" data-border-drag="s" title="Drag border to move"></div>
+      <div class="__edit_border_drag bd-w" data-border-drag="w" title="Drag border to move"></div>
       <div class="__edit_handle h-e"  data-handle="e"  title="Drag to resize width"></div>
       <div class="__edit_handle h-s"  data-handle="s"  title="Drag to resize height"></div>
       <div class="__edit_handle h-se" data-handle="se" title="Drag to resize"></div>
@@ -27,7 +31,7 @@ export function initDom() {
     <div id="__edit_toolbar" hidden>
       <span class="path" data-role="path"></span>
       <span class="sep"></span>
-      <button data-act="edit" aria-label="Edit text" title="Edit text (Enter or double-click)">${icon("edit")}</button>
+      <button data-act="edit" aria-label="Edit text" title="Edit text (F2, Enter, or double-click)">${icon("edit")}</button>
       <button data-act="comment" aria-label="Comment" title="Comment (C)">${icon("comment")}</button>
       <button data-act="drag" class="drag-handle" aria-label="Drag component" title="Drag to move this component before/after another">${icon("drag")}</button>
       <span class="sep"></span>
@@ -56,9 +60,9 @@ export function initDom() {
           <tr><td><kbd>Click</kbd></td><td>Select element; click again on text to edit</td></tr>
           <tr><td><kbd>Click</kbd> on text</td><td>Single-click drops straight into edit</td></tr>
           <tr><td><kbd>Drag edge</kbd></td><td>Resize HTML element (E / S / SE handles)</td></tr>
-          <tr><td><kbd>Enter</kbd> / <kbd>E</kbd></td><td>Edit selected text/label</td></tr>
+          <tr><td><kbd>F2</kbd> / <kbd>Enter</kbd> / <kbd>E</kbd></td><td>Edit selected text/label</td></tr>
           <tr><td><kbd>C</kbd></td><td>Add a comment</td></tr>
-          <tr><td><kbd>Drag handle</kbd></td><td>Reorder HTML or reposition diagram item</td></tr>
+          <tr><td><kbd>Drag border</kbd> / <kbd>Drag handle</kbd></td><td>Reorder HTML or reposition diagram item</td></tr>
           <tr><td><kbd>Cmd</kbd><kbd>Z</kbd></td><td>Undo last saved edit or move</td></tr>
           <tr><td><kbd>Cmd</kbd><kbd>Y</kbd> / <kbd>Cmd</kbd><kbd>Shift</kbd><kbd>Z</kbd></td><td>Redo</td></tr>
           <tr><td><kbd>Option</kbd><kbd>Left</kbd> / <kbd>Right</kbd></td><td>Previous / next sibling</td></tr>
@@ -100,7 +104,11 @@ export function initDom() {
     toolbar,
     pathEl:      toolbar.querySelector("[data-role=path]"),
     editBtn:     toolbar.querySelector("[data-act=edit]"),
+    commentBtn:  toolbar.querySelector("[data-act=comment]"),
     dragBtn:     toolbar.querySelector("[data-act=drag]"),
+    undoBtn:     toolbar.querySelector("[data-act=undo]"),
+    redoBtn:     toolbar.querySelector("[data-act=redo]"),
+    closeBtn:    toolbar.querySelector("[data-act=close]"),
     navPrev:     toolbar.querySelector("[data-act=nav-prev]"),
     navNext:     toolbar.querySelector("[data-act=nav-next]"),
     navParent:   toolbar.querySelector("[data-act=nav-parent]"),

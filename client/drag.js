@@ -117,8 +117,6 @@ async function onResizeEnd(e) {
   try {
     await api.resizeElement(el.getAttribute("data-edit-id"), body);
     flash("Resized.", { kind: "success" });
-    el.classList.add("__edit_pulse");
-    setTimeout(() => el.classList.remove("__edit_pulse"), 700);
   } catch (err) {
     restore();
     flash("Resize failed: " + err.message, { kind: "error" });

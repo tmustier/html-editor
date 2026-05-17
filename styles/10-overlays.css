@@ -16,10 +16,26 @@
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6) inset;
 }
 
-/* Resize handles — the selectBox itself stays pointer-events:none so the
-   user can keep clicking/typing inside the element it outlines, but the
-   individual handles override that and become draggable. Visible only when
-   the selected element is marked as resizable. */
+/* The selectBox itself stays pointer-events:none so the user can keep
+   clicking/typing inside the selected element. Thin child overlays on the
+   border opt back into pointer events for direct manipulation:
+   - transparent border drags move/reorder draggable objects
+   - blue handles resize resizable HTML objects and sit above border drags */
+.__edit_border_drag {
+  position: absolute;
+  display: none;
+  pointer-events: auto;
+  z-index: 2147483641;
+  cursor: grab;
+}
+#__edit_select[data-can-move="true"] .__edit_border_drag { display: block; }
+#__edit_select[data-editing="true"] .__edit_border_drag,
+html.__edit_dragging #__edit_select .__edit_border_drag { display: none; }
+.__edit_border_drag.bd-n { left: 10px; right: 10px; top: -6px; height: 12px; }
+.__edit_border_drag.bd-s { left: 10px; right: 10px; bottom: -6px; height: 12px; }
+.__edit_border_drag.bd-w { top: 10px; bottom: 10px; left: -6px; width: 12px; }
+.__edit_border_drag.bd-e { top: 10px; bottom: 10px; right: -6px; width: 12px; }
+
 .__edit_handle {
   position: absolute;
   display: none;
@@ -30,9 +46,10 @@
   border-radius: 2px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
   pointer-events: auto;
-  z-index: 2147483641;
+  z-index: 2147483642;
 }
 #__edit_select[data-resizable="true"] .__edit_handle { display: block; }
+#__edit_select[data-editing="true"] .__edit_handle { display: none; }
 .__edit_handle.h-e  { right: -6px;  top: 50%;     transform: translateY(-50%); cursor: ew-resize; }
 .__edit_handle.h-s  { bottom: -6px; left: 50%;    transform: translateX(-50%); cursor: ns-resize; }
 .__edit_handle.h-se { right: -6px;  bottom: -6px;                               cursor: nwse-resize; }

@@ -84,7 +84,40 @@ test.describe("move + resize", () => {
     }
   });
 
-  test("HTML reorder drag persists the move to disk", async ({ page }) => {
+  test("resize handle still resizes instead of starting a border drag", async ({ page }) => {
+    const editor = await startEditor("rich-text.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+
+      const id = await page.locator("section[data-edit-id]").first()
+        .getAttribute("data-edit-id");
+      await page.evaluate((id) => {
+        window.__edit.select(document.querySelector(`[data-edit-id="${id}"]`));
+      }, id);
+
+      const handle = page.locator('#__edit_select [data-handle="se"]');
+      await expect(handle).toBeVisible();
+      const box = await handle.boundingBox();
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(box.x + 80, box.y + 50, { steps: 6 });
+      await page.mouse.up();
+      await page.waitForTimeout(250);
+
+      const onDisk = editor.readFile();
+      const m = onDisk.match(new RegExp(
+        `<section[^>]*data-edit-id="${id}"[^>]*>`));
+      expect(m).not.toBeNull();
+      expect(m[0]).toContain("width:");
+      expect(m[0]).toContain("height:");
+      expect(m[0]).not.toContain("translate(");
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("HTML border drag persists the move to disk", async ({ page }) => {
     const editor = await startEditor("rich-text.html");
     try {
       await page.goto(editor.url);
@@ -104,14 +137,16 @@ test.describe("move + resize", () => {
         window.__edit.select(document.querySelector(`[data-edit-id="${id}"]`));
       }, first);
 
-      const handle = page.locator('#__edit_toolbar [data-act="drag"]');
+      const handle = page.locator('#__edit_select [data-border-drag="s"]');
       await expect(handle).toBeVisible();
       const handleBox = await handle.boundingBox();
       const secondP = page.locator(`[data-edit-id="${second}"]`);
       const targetBox = await secondP.boundingBox();
 
+      // Start away from the centre/bottom resize handle; handles should keep
+      // resize semantics, while the rest of the border starts a move.
       await page.mouse.move(
-        handleBox.x + handleBox.width / 2,
+        handleBox.x + 24,
         handleBox.y + handleBox.height / 2);
       await page.mouse.down();
       await page.mouse.move(
