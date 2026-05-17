@@ -12,9 +12,17 @@ Open `http://127.0.0.1:8765/`.
 
 ## Structure
 
-- `serve.py` — local HTTP server, source-file mutation endpoints, comments, undo/redo history, pi comment bridge.
-- `client/*.js` — browser overlay code, concatenated in filename order by `serve.py` at startup.
-- `styles/*.css` — overlay styles, concatenated in filename order by `serve.py` at startup.
+- `serve.py` — 14-line launcher pointing at `server.app:main`.
+- `server/` — server package:
+  - `app.py` argparse and `ThreadingHTTPServer` wiring
+  - `routes.py` HTTP route handlers (one per editor capability)
+  - `document.py` pure BeautifulSoup mutations (no IO, no HTTP)
+  - `history.py` thread-safe undo/redo over disk snapshots
+  - `comments.py` comment store + pi extension JSONL bridge
+  - `assets.py` reads `client/*.js` and `styles/*.css` at import time
+- `client/*.js` — browser overlay, concatenated in filename order at startup.
+- `styles/*.css` — overlay styles, concatenated in filename order at startup.
+- `tests/` — stdlib `unittest` suite covering every `document.py` function plus `history.py` and `comments.py`.
 
 ## Client file map
 
@@ -42,6 +50,14 @@ Raw SVG primitives (`rect`, `text`, `path`, markers, etc.) are not independent e
 ## Quick checks
 
 ```bash
-./scripts/check.sh
+./scripts/check.sh            # syntax + unit tests (sub-second)
+./scripts/test.sh             # unit tests only
 curl -s http://127.0.0.1:8765/healthz
 ```
+
+## Adding a new editor capability
+
+1. Add a pure function in `server/document.py` that mutates a BeautifulSoup tree and returns `(ok: bool, payload: dict)`.
+2. Add the route in `server/routes.py` — a handler that reads the JSON body, calls your function, snapshots history, saves, and returns the payload. Register it in `_ROUTES`.
+3. Add tests in `tests/test_document.py`.
+4. Call the new endpoint from the client.
