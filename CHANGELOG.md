@@ -6,20 +6,38 @@ All notable changes to `html-editor` are documented here. The format follows
 
 ## Unreleased
 
+## 0.2.0 — 2026-05-18
+
 ### Added
 
-- `Cmd/Ctrl+C` on a selected row or column now copies the whole line as TSV +
-  HTML, so `Cmd/Ctrl+V` into another row/column fills every copied cell instead
-  of only the anchor cell.
-- `Cmd/Ctrl+C` followed by `Cmd/Ctrl+Shift+=` now inserts copied rows/columns
-  structurally before the current row/column, preserving copied cell markup and
-  assigning fresh edit IDs instead of inserting an empty line.
+- **Excel-style row/column copy.** `Cmd/Ctrl+C` on a selected row or column
+  now copies the whole line as TSV + HTML, so `Cmd/Ctrl+V` into another
+  row/column fills every copied cell instead of only the anchor cell. Multi
+  row/column copies surface a warning instead of silently copying one line,
+  and staged row/column copies clear when you enter edit mode.
+- **Structural row/column duplication from copy.** `Cmd/Ctrl+C` followed by
+  `Cmd/Ctrl+Shift+=` inserts copied rows/columns structurally before the
+  current row/column, preserving copied cell markup and assigning fresh edit
+  IDs instead of inserting an empty line.
+- New server actions `row-copy-before`, `row-copy-after`, `col-copy-before`,
+  `col-copy-after` plus a `source_cell_id` payload key powering structural
+  row/column duplication.
 
 ### Changed
 
-- Refactored staged copy/cut state into one transfer model, split table-grid
-  geometry, keyboard routing, server table operations, and large table e2e
-  coverage into focused modules/files without changing behavior.
+- **Unified transfer model.** Staged cut and staged line-copy state collapsed
+  into a single `state.transfer` object (`client/transfer.js`), so the editor
+  has one mental model for row/column/range cut and copy.
+- **Refactored table internals.** Table geometry, range matrices, grid
+  navigation, and row/column hit zones moved out of `client/targets.js` into
+  `client/tablegrid.js`. Keyboard shortcut routing moved out of
+  `client/events.js` into `client/keyboard.js`. Server row/column structure
+  operations moved out of `server/document.py` into `server/table_ops.py`
+  behind a `document.table_operation()` wrapper.
+- **E2E split.** The 1700-line `tests/e2e/07-keyboard-nav.spec.js` is now
+  four focused specs (`07-table-navigation`, `08-table-structure`,
+  `09-table-transfer`, `10-range-actions`) sharing a `table-helpers.js`
+  fixture builder.
 
 ## 0.1.8 — 2026-05-18
 
