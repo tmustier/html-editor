@@ -4,6 +4,18 @@ All notable changes to `html-editor` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project follows
 [Semantic Versioning](https://semver.org/).
 
+## 0.1.4 — 2026-05-18
+
+### Added
+
+- Row/column table selection UX: `Shift+Space` selects the current row, `Ctrl+Space` selects the current column, and `Option+Space` is available as a macOS-friendly column fallback.
+- Clickable left/top table handles for selecting rows and columns.
+- Scoped table menus: row selections show row actions, column selections show column actions.
+
+### Fixed
+
+- Undo after structural table edits is more robust, including `Cmd+Z` from a pristine newly-inserted blank cell.
+
 ## 0.1.3 — 2026-05-18
 
 ### Added

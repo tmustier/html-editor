@@ -48,12 +48,14 @@ export function initRuntime() {
   loadComments();
 
   const restoreId = sessionStorage.getItem("__edit_restore_selection");
+  const restoreTableMode = sessionStorage.getItem("__edit_restore_table_mode");
   if (restoreId) {
     sessionStorage.removeItem("__edit_restore_selection");
+    sessionStorage.removeItem("__edit_restore_table_mode");
     const restoreEl = Array.from(document.querySelectorAll("[data-edit-id]")).find((el) =>
       el.getAttribute("data-edit-id") === restoreId);
     if (restoreEl) {
-      selectElement(restoreEl);
+      selectElement(restoreEl, ["row", "column"].includes(restoreTableMode) ? restoreTableMode : null);
       ensureVisible(restoreEl);
     }
   }
@@ -70,6 +72,7 @@ export function initRuntime() {
     toggleHelp,
     beginDrag,
     target: currentTarget,
+    selectionMode: () => state.tableSelectionMode,
     undo: () => performHistory("undo"),
     redo: () => performHistory("redo"),
   };

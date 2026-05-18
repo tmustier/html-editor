@@ -35,9 +35,9 @@ Comments are stored next to the HTML file in `<file>.comments.json`.
 - **Duplicate things** — clone a selected HTML block/table or leaf SVG item with fresh edit IDs.
 - **Resize** — drag handles on the selection box for HTML elements with sensible width/height.
 - **Comment** — leave comments anchored to specific elements; they show up in a sidebar and survive reloads.
-- **Undo / redo** — every save and move is snapshotted on disk.
+- **Undo / redo** — every save, move, resize, duplicate, and table-structure change is snapshotted on disk.
 - **Spreadsheet paste** — paste an Excel/Sheets-style range into a table cell to fill the existing table rectangle from that cell; overflow is clipped rather than adding rows/columns.
-- **Table structure edits** — select a table cell, then use the Table toolbar button to insert/delete/reorder rows and columns. First pass supports simple rectangular tables (no `rowspan`/`colspan`).
+- **Table structure edits** — select a table cell, press `Shift+Space` for its row or `Ctrl+Space` for its column (`Option+Space` also works if macOS owns `Ctrl+Space`), or click the left/top handles; then use the Table toolbar button to insert/delete/reorder rows and columns. First pass supports simple rectangular tables (no `rowspan`/`colspan`).
 - **Navigate by structure or by grid** — see shortcuts below.
 
 ## Keyboard shortcuts
@@ -54,6 +54,8 @@ Comments are stored next to the HTML file in `<file>.comments.json`.
 | `Cmd+Z` / `Cmd+Y` (`Cmd+Shift+Z`) | Undo / redo last saved edit or move |
 | Arrow keys | Move between table/grid cells when a cell is selected |
 | `Cmd+Arrow keys` | Jump to the edge of the current table row/column |
+| `Shift+Space` / `Ctrl+Space` | Select the current table row / column (`Option+Space` also selects column) |
+| Row/column handles | Click the left/top table handles to select a row or column |
 | Table toolbar button | Insert, delete, or reorder rows/columns for simple rectangular tables |
 | `Tab` / `Shift+Tab` | Next / previous table cell (saves the current cell first while editing) |
 | `Option+Left` / `Right` | Previous / next sibling |

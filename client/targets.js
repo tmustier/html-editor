@@ -237,6 +237,84 @@ function differentCellAt(matrix, row, col, current) {
   return selectableInCell(cell);
 }
 
+function uniqueCells(cells) {
+  const seen = new Set();
+  return cells.filter((cell) => {
+    if (!cell || seen.has(cell)) return false;
+    seen.add(cell);
+    return true;
+  });
+}
+
+export function tableSelectionCells(el, mode) {
+  const cell = gridCellFrom(el);
+  const grid = cell && gridForCell(cell);
+  if (!grid || !mode) return [];
+  const { matrix, position } = grid;
+  if (mode === "row") return uniqueCells(matrix[position.row] || []);
+  if (mode === "column") {
+    return uniqueCells(matrix.map((row) => row && row[position.col]).filter(Boolean));
+  }
+  return [];
+}
+
+function unionDocumentRect(elements) {
+  const rects = elements.filter(Boolean).map(rectOf);
+  if (!rects.length) return null;
+  const left = Math.min(...rects.map((r) => r.left));
+  const top = Math.min(...rects.map((r) => r.top));
+  const right = Math.max(...rects.map((r) => r.left + r.width));
+  const bottom = Math.max(...rects.map((r) => r.top + r.height));
+  return { left, top, width: right - left, height: bottom - top };
+}
+
+function unionViewportRect(elements) {
+  const rects = elements.filter(Boolean).map((el) => el.getBoundingClientRect());
+  if (!rects.length) return null;
+  const left = Math.min(...rects.map((r) => r.left));
+  const top = Math.min(...rects.map((r) => r.top));
+  const right = Math.max(...rects.map((r) => r.right));
+  const bottom = Math.max(...rects.map((r) => r.bottom));
+  return { left, top, right, bottom, width: right - left, height: bottom - top };
+}
+
+function selectionRectFor(el) {
+  const mode = state.tableSelectionMode;
+  if (mode && gridCellFrom(el)) {
+    const selectionRect = unionDocumentRect(tableSelectionCells(el, mode));
+    if (selectionRect) return selectionRect;
+  }
+  return rectOf(el);
+}
+
+export function tableEdgeSelectionModeFromEvent(event, el) {
+  const cell = gridCellFrom(el);
+  if (!cell || !event) return null;
+  const rowRect = unionViewportRect(tableSelectionCells(cell, "row"));
+  const colRect = unionViewportRect(tableSelectionCells(cell, "column"));
+  const tolerance = 10;
+  if (rowRect && event.clientX >= rowRect.left && event.clientX <= rowRect.left + tolerance
+      && event.clientY >= rowRect.top && event.clientY <= rowRect.bottom) {
+    return "row";
+  }
+  if (colRect && event.clientY >= colRect.top && event.clientY <= colRect.top + tolerance
+      && event.clientX >= colRect.left && event.clientX <= colRect.right) {
+    return "column";
+  }
+  return null;
+}
+
+export function selectTableDimension(mode) {
+  const cell = gridCellFrom(state.selected);
+  if (!cell || !["row", "column"].includes(mode)) {
+    flash("Select a table cell first.", { kind: "warning" });
+    return false;
+  }
+  selectElementInternal(cell, mode);
+  ensureVisible(cell);
+  return true;
+}
+
 export function gridNeighbor(el, direction) {
   const cell = gridCellFrom(el);
   const grid = cell && gridForCell(cell);
@@ -410,9 +488,48 @@ function canDuplicateElement(el, target) {
   return true;
 }
 
+function placeTableHandles(el) {
+  const cell = gridCellFrom(el);
+  if (!cell || state.editing || state.dragging) {
+    dom.rowHandle.style.display = "none";
+    dom.colHandle.style.display = "none";
+    return;
+  }
+  const rowRect = unionDocumentRect(tableSelectionCells(cell, "row"));
+  const colRect = unionDocumentRect(tableSelectionCells(cell, "column"));
+  if (rowRect) {
+    const outsideLeft = rowRect.left - 12;
+    const clampedLeft = outsideLeft < window.scrollX + 2
+      ? rowRect.left + 2
+      : outsideLeft;
+    dom.rowHandle.style.display = "block";
+    dom.rowHandle.style.top = rowRect.top + "px";
+    dom.rowHandle.style.left = clampedLeft + "px";
+    dom.rowHandle.style.width = "10px";
+    dom.rowHandle.style.height = rowRect.height + "px";
+    dom.rowHandle.dataset.active = state.tableSelectionMode === "row" ? "true" : "false";
+  } else {
+    dom.rowHandle.style.display = "none";
+  }
+  if (colRect) {
+    const outsideTop = colRect.top - 12;
+    const clampedTop = outsideTop < window.scrollY + 2
+      ? colRect.top + 2
+      : outsideTop;
+    dom.colHandle.style.display = "block";
+    dom.colHandle.style.top = clampedTop + "px";
+    dom.colHandle.style.left = colRect.left + "px";
+    dom.colHandle.style.width = colRect.width + "px";
+    dom.colHandle.style.height = "10px";
+    dom.colHandle.dataset.active = state.tableSelectionMode === "column" ? "true" : "false";
+  } else {
+    dom.colHandle.style.display = "none";
+  }
+}
+
 export function placeBox(box, el) {
   if (!el) { box.style.display = "none"; return; }
-  const r = rectOf(el);
+  const r = box === dom.selectBox ? selectionRectFor(el) : rectOf(el);
   box.style.display = "block";
   box.style.top = r.top + "px";
   box.style.left = r.left + "px";
@@ -420,21 +537,28 @@ export function placeBox(box, el) {
   box.style.height = r.height + "px";
   if (box === dom.selectBox) {
     const target = targetFor(el);
-    box.dataset.resizable = isHtmlResizable(el) ? "true" : "false";
-    box.dataset.canMove = target && target.canMove ? "true" : "false";
+    const isTableRange = !!state.tableSelectionMode;
+    box.dataset.resizable = !isTableRange && isHtmlResizable(el) ? "true" : "false";
+    box.dataset.canMove = !isTableRange && target && target.canMove ? "true" : "false";
     box.dataset.editing = state.editing ? "true" : "false";
+    box.dataset.tableSelection = state.tableSelectionMode || "cell";
+    placeTableHandles(el);
   }
 }
 
 export function placeToolbar(el) {
   if (!el) { dom.toolbar.hidden = true; return; }
-  const r = rectOf(el);
+  const r = selectionRectFor(el);
   dom.toolbar.hidden = false;
   const target = targetFor(el);
   const isEditing = !!state.editing;
-  dom.toolbar.dataset.mode = isEditing ? "editing" : "selected";
-  dom.pathEl.innerHTML = breadcrumb(el) + (isEditing ? '<span class="editing">editing</span>' : "");
-  dom.editBtn.disabled = isEditing || !(target && target.canEditText);
+  const tableMode = state.tableSelectionMode;
+  const isTableRange = !!tableMode;
+  dom.toolbar.dataset.mode = isEditing ? "editing" : (tableMode || "selected");
+  dom.pathEl.innerHTML = breadcrumb(el)
+    + (isEditing ? '<span class="editing">editing</span>' : "")
+    + (tableMode ? `<span class="selection">${tableMode}</span>` : "");
+  dom.editBtn.disabled = isEditing || isTableRange || !(target && target.canEditText);
   dom.editBtn.title = isEditing
     ? "Already editing — Cmd+Enter saves, Esc cancels"
     : (target && (target.kind === "svg-item" || target.kind === "svg-text")
@@ -442,9 +566,9 @@ export function placeToolbar(el) {
       : (dom.editBtn.disabled
           ? "Structural component selected. Select text inside it to edit."
           : "Edit text (F2, Enter, or double-click)"));
-  dom.commentBtn.disabled = isEditing;
-  dom.dragBtn.disabled = isEditing || !(target && target.canMove);
-  dom.duplicateBtn.disabled = isEditing || !canDuplicateElement(el, target);
+  dom.commentBtn.disabled = isEditing || isTableRange;
+  dom.dragBtn.disabled = isEditing || isTableRange || !(target && target.canMove);
+  dom.duplicateBtn.disabled = isEditing || isTableRange || !canDuplicateElement(el, target);
   dom.duplicateBtn.title = isEditing
     ? "Finish editing before duplicating"
     : (dom.duplicateBtn.disabled
@@ -467,15 +591,21 @@ export function placeToolbar(el) {
   dom.undoBtn.disabled = isEditing;
   dom.redoBtn.disabled = isEditing;
   dom.closeBtn.disabled = isEditing;
-  dom.navParent.disabled = isEditing || !editableAncestor(el.parentElement);
-  dom.navChild.disabled  = isEditing || !firstEditableChild(el);
-  dom.navPrev.disabled   = isEditing || !prevEditableSibling(el);
-  dom.navNext.disabled   = isEditing || !nextEditableSibling(el);
+  dom.navParent.disabled = isEditing || isTableRange || !editableAncestor(el.parentElement);
+  dom.navChild.disabled  = isEditing || isTableRange || !firstEditableChild(el);
+  dom.navPrev.disabled   = isEditing || isTableRange || !prevEditableSibling(el);
+  dom.navNext.disabled   = isEditing || isTableRange || !nextEditableSibling(el);
 
   const tb = dom.toolbar.getBoundingClientRect();
   let top = r.top - tb.height - 6;
   let left = r.left;
-  if (top < window.scrollY + 4) top = r.top + r.height + 6;
+  if (tableMode || gridCellFrom(el)) {
+    top = r.top + r.height + 8;
+    if (top + tb.height > window.scrollY + window.innerHeight - 8) {
+      top = r.top - tb.height - 18;
+    }
+  } else if (top < window.scrollY + 4) top = r.top + r.height + 6;
+  if (top < window.scrollY + 4) top = window.scrollY + 4;
   const maxLeft = window.scrollX + window.innerWidth - tb.width - 8;
   if (left > maxLeft) left = maxLeft;
   if (left < window.scrollX + 4) left = window.scrollX + 4;
@@ -499,8 +629,9 @@ export function toggleHelp(force) {
 
 // Re-exported by events.js; defined here because selectElement depends on a
 // few targets-module helpers.
-export function selectElementInternal(el) {
+export function selectElementInternal(el, tableSelectionMode = null) {
   state.selected = el;
+  state.tableSelectionMode = tableSelectionMode;
   state.hovered = null;
   dom.hoverBox.style.display = "none";
   placeBox(dom.selectBox, el);

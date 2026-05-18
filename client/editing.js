@@ -31,6 +31,10 @@ let activeHtmlFinish = null;
 
 export function startEdit(preferredSource, clickX, clickY) {
   if (!state.selected || state.editing) return;
+  if (state.tableSelectionMode) {
+    flash("Select an individual cell before editing text.", { kind: "info" });
+    return;
+  }
   const target = currentTarget();
   if (target && (target.kind === "svg-item" || target.kind === "svg-text") && target.canEditText) {
     return startSvgLabelEdit(preferredSource, clickX, clickY);
@@ -69,6 +73,7 @@ function startHtmlTextEdit(el, clickX, clickY) {
   placeCaretFromClickOrEnd(el, clickX, clickY);
 
   let finished = false;
+  const hasDirtyContent = () => hadChildren ? el.innerHTML !== originalHTML : el.innerText !== originalText;
   const finish = async (commit) => {
     // Removing contenteditable can itself fire blur. Unhook listeners and guard
     // re-entry first so Escape/Cmd+Enter cannot recursively commit and create a
@@ -102,7 +107,24 @@ function startHtmlTextEdit(el, clickX, clickY) {
 
   const onBlur = () => finish(true);
   const onKey = (e) => {
-    if (e.key === "Escape") {
+    const key = e.key.toLowerCase();
+    const isHistoryKey = (e.metaKey || e.ctrlKey) && !e.altKey
+      && (key === "z" || key === "y");
+    if (isHistoryKey && !hasDirtyContent()) {
+      e.preventDefault();
+      e.stopPropagation();
+      void (async () => {
+        await finish(false);
+        try {
+          if (key === "y" || e.shiftKey) await api.redo();
+          else await api.undo();
+          flash(key === "y" || e.shiftKey ? "Redone." : "Undone.", { kind: "success" });
+          reloadAfterMutation({ delay: 120 });
+        } catch (err) {
+          flash(err.message || "Nothing to undo.", { kind: "warning" });
+        }
+      })();
+    } else if (e.key === "Escape") {
       e.preventDefault();
       e.stopPropagation();
       finish(false);

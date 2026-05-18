@@ -214,6 +214,43 @@ test.describe("keyboard navigation + adversarial flows", () => {
     }
   });
 
+  test("Shift+Space, Ctrl+Space, and handles select table rows/columns", async ({ page }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+
+      await selectCell(page, "Epsilon");
+      await expect(page.locator("#__edit_table_row_handle")).toBeVisible();
+      await expect(page.locator("#__edit_table_col_handle")).toBeVisible();
+
+      await page.keyboard.press("Shift+Space");
+      expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("row");
+      await page.locator('#__edit_toolbar [data-act="table"]').click();
+      await expect(page.locator('#__edit_tablemenu [data-table-act="row-delete"]')).toBeVisible();
+      await expect(page.locator('#__edit_tablemenu [data-table-act="col-delete"]')).toBeHidden();
+      await page.keyboard.press("Escape");
+      await page.keyboard.press("Escape");
+      expect(await page.evaluate(() => window.__edit.selectionMode())).toBe(null);
+
+      await page.keyboard.press("Control+Space");
+      expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("column");
+      await page.keyboard.press("Escape");
+      expect(await page.evaluate(() => window.__edit.selectionMode())).toBe(null);
+
+      await page.locator("#__edit_table_row_handle").click();
+      expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("row");
+      await page.locator("#__edit_table_col_handle").click();
+      expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("column");
+
+      await selectCell(page, "Beta");
+      await page.locator("#__edit_table_col_handle").click();
+      expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("column");
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
   test("toolbar table menu inserts rows and restores selection after reload", async ({ page }) => {
     const editor = await startEditor("table-grid.html");
     try {
@@ -236,6 +273,7 @@ test.describe("keyboard navigation + adversarial flows", () => {
         ["Eta", "Theta", "Iota"],
       ]);
       expect(await selectedText(page)).toBe("");
+      expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("row");
       expect(editor.readFile()).toMatch(/<td data-edit-id="e\d+"><\/td>/);
     } finally {
       await editor.cleanup();
@@ -262,6 +300,7 @@ test.describe("keyboard navigation + adversarial flows", () => {
         ["Eta", "", "Theta", "Iota"],
       ]);
       expect(await selectedText(page)).toBe("");
+      expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("column");
     } finally {
       await editor.cleanup();
     }
@@ -285,7 +324,10 @@ test.describe("keyboard navigation + adversarial flows", () => {
         ["Eta", "Theta", "Iota"],
       ]);
       expect(await selectedText(page)).toBe("Theta");
+      expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("row");
 
+      await page.keyboard.press("Control+Space");
+      expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("column");
       await page.locator('#__edit_toolbar [data-act="table"]').click();
       await page.locator('#__edit_tablemenu [data-table-act="col-delete"]').click();
       await page.waitForFunction(() =>
@@ -321,7 +363,10 @@ test.describe("keyboard navigation + adversarial flows", () => {
         ["Eta", "Theta", "Iota"],
       ]);
       expect(await selectedText(page)).toBe("Epsilon");
+      expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("row");
 
+      await page.keyboard.press("Control+Space");
+      expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("column");
       await page.locator('#__edit_toolbar [data-act="table"]').click();
       await page.locator('#__edit_tablemenu [data-table-act="col-move-right"]').click();
       await page.waitForFunction(() =>
@@ -335,6 +380,37 @@ test.describe("keyboard navigation + adversarial flows", () => {
         ["Eta", "Iota", "Theta"],
       ]);
       expect(await selectedText(page)).toBe("Epsilon");
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("Cmd+Z undoes inserted columns even from a pristine blank cell edit", async ({ page }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+
+      await selectCell(page, "Epsilon");
+      await page.locator('#__edit_toolbar [data-act="table"]').click();
+      await page.locator('#__edit_tablemenu [data-table-act="col-insert-before"]').click();
+      await page.waitForFunction(() =>
+        window.__edit && document.querySelector('table[data-edit-id="e2"] tr')?.cells.length === 4);
+
+      const blankCell = page.locator('table[data-edit-id="e2"] tr').nth(1).locator("td").nth(1);
+      await blankCell.click();
+      await expect(blankCell).toHaveAttribute("contenteditable", "true");
+      await page.keyboard.press("Meta+Z");
+
+      await page.waitForFunction(() =>
+        window.__edit && document.querySelector('table[data-edit-id="e2"] tr')?.cells.length === 3);
+      const rows = await page.locator('table[data-edit-id="e2"] tr').evaluateAll((trs) =>
+        trs.map((tr) => Array.from(tr.cells).map((td) => td.textContent.trim())));
+      expect(rows).toEqual([
+        ["Alpha", "Beta", "Gamma"],
+        ["Delta", "Epsilon", "Zeta"],
+        ["Eta", "Theta", "Iota"],
+      ]);
     } finally {
       await editor.cleanup();
     }

@@ -15,6 +15,37 @@
   background: rgba(37, 99, 235, 0.08);
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6) inset;
 }
+#__edit_select[data-table-selection="row"],
+#__edit_select[data-table-selection="column"] {
+  border-color: #7c3aed;
+  background: rgba(124, 58, 237, 0.10);
+}
+
+#__edit_table_row_handle,
+#__edit_table_col_handle {
+  position: absolute;
+  z-index: 2147483643;
+  display: none;
+  pointer-events: auto;
+  background: rgba(124, 58, 237, 0.16);
+  border: 1px solid rgba(124, 58, 237, 0.66);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+}
+#__edit_table_row_handle {
+  width: 10px;
+  border-radius: 5px 0 0 5px;
+  cursor: pointer;
+}
+#__edit_table_col_handle {
+  height: 10px;
+  border-radius: 5px 5px 0 0;
+  cursor: pointer;
+}
+#__edit_table_row_handle[data-active="true"],
+#__edit_table_col_handle[data-active="true"] {
+  background: rgba(124, 58, 237, 0.34);
+  border-color: #7c3aed;
+}
 
 /* The selectBox itself stays pointer-events:none so the user can keep
    clicking/typing inside the selected element. Thin child overlays on the

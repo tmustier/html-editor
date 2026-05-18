@@ -18,6 +18,8 @@ export function initDom() {
   root.id = "__edit_root";
   root.innerHTML = `
     <div id="__edit_hover"></div>
+    <div id="__edit_table_row_handle" title="Select row (Shift+Space)"></div>
+    <div id="__edit_table_col_handle" title="Select column (Ctrl+Space or Option+Space)"></div>
     <div id="__edit_select">
       <div class="__edit_border_drag bd-n" data-border-drag="n" title="Drag border to move"></div>
       <div class="__edit_border_drag bd-e" data-border-drag="e" title="Drag border to move"></div>
@@ -48,7 +50,7 @@ export function initDom() {
       <button data-act="close" aria-label="Deselect" title="Deselect (Esc)">${icon("close")}</button>
     </div>
     <div id="__edit_tablemenu" hidden>
-      <div class="group">
+      <div class="group" data-table-group="row">
         <div class="label">Rows</div>
         <button data-table-act="row-insert-before">Insert row above</button>
         <button data-table-act="row-insert-after">Insert row below</button>
@@ -56,7 +58,7 @@ export function initDom() {
         <button data-table-act="row-move-down">Move row down</button>
         <button data-table-act="row-delete" class="danger">Delete row</button>
       </div>
-      <div class="group">
+      <div class="group" data-table-group="column">
         <div class="label">Columns</div>
         <button data-table-act="col-insert-before">Insert column left</button>
         <button data-table-act="col-insert-after">Insert column right</button>
@@ -90,6 +92,8 @@ export function initDom() {
           <tr><td><kbd>Cmd</kbd><kbd>Y</kbd> / <kbd>Cmd</kbd><kbd>Shift</kbd><kbd>Z</kbd></td><td>Redo</td></tr>
           <tr><td><kbd>Arrow keys</kbd></td><td>Move between table/grid cells when a cell is selected</td></tr>
           <tr><td><kbd>Cmd</kbd><kbd>Arrow keys</kbd></td><td>Jump to the edge of the current table row/column</td></tr>
+          <tr><td><kbd>Shift</kbd><kbd>Space</kbd> / <kbd>Ctrl</kbd><kbd>Space</kbd></td><td>Select the current table row / column (Option+Space also selects column if macOS owns Ctrl+Space)</td></tr>
+          <tr><td><kbd>Row/column handles</kbd></td><td>Click left/top table handles to select a row or column</td></tr>
           <tr><td><kbd>Table</kbd> button</td><td>Insert, delete, or reorder rows/columns for simple rectangular tables</td></tr>
           <tr><td><kbd>Tab</kbd> / <kbd>Shift</kbd><kbd>Tab</kbd></td><td>Next / previous table cell; saves the current cell first while editing</td></tr>
           <tr><td><kbd>Option</kbd><kbd>Left</kbd> / <kbd>Right</kbd></td><td>Previous / next sibling</td></tr>
@@ -127,6 +131,8 @@ export function initDom() {
   Object.assign(dom, {
     root,
     hoverBox:    root.querySelector("#__edit_hover"),
+    rowHandle:   root.querySelector("#__edit_table_row_handle"),
+    colHandle:   root.querySelector("#__edit_table_col_handle"),
     selectBox:   root.querySelector("#__edit_select"),
     dropLine:    root.querySelector("#__edit_drop"),
     toolbar,

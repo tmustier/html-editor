@@ -18,18 +18,23 @@ import {
   placeBox,
   placeToolbar,
   selectElementInternal,
+  selectTableDimension,
+  tableEdgeSelectionModeFromEvent,
   targetFor,
   toggleHelp,
 } from "./targets.js";
 
-export function selectElement(el) {
-  selectElementInternal(el);
+export function selectElement(el, tableSelectionMode = null) {
+  selectElementInternal(el, tableSelectionMode);
 }
 
 export function deselect() {
   if (state.svgEditing) finishSvgLabelEdit(false);
   state.selected = null;
+  state.tableSelectionMode = null;
   dom.selectBox.style.display = "none";
+  dom.rowHandle.style.display = "none";
+  dom.colHandle.style.display = "none";
   dom.toolbar.hidden = true;
   dom.commentBox.hidden = true;
   dom.tableMenu.hidden = true;
@@ -59,6 +64,7 @@ function toggleTableMenu(force) {
     flash("Select a table cell first.", { kind: "warning" });
     return;
   }
+  dom.tableMenu.dataset.mode = state.tableSelectionMode || "cell";
   dom.tableMenu.hidden = false;
   placeTableMenu();
 }
@@ -73,6 +79,11 @@ async function performTableOperation(action) {
     const result = await api.tableOperation(cell.getAttribute("data-edit-id"), action);
     if (result.selection_id) {
       sessionStorage.setItem("__edit_restore_selection", result.selection_id);
+      const restoreMode = action.startsWith("row-")
+        ? "row"
+        : action.startsWith("col-") ? "column" : (state.tableSelectionMode || "");
+      if (restoreMode) sessionStorage.setItem("__edit_restore_table_mode", restoreMode);
+      else sessionStorage.removeItem("__edit_restore_table_mode");
     }
     const label = action.replace(/-/g, " ");
     flash(`Table ${label} done.`, { kind: "success" });
@@ -92,6 +103,7 @@ async function performDuplicate() {
     const result = await api.duplicateElement(target.id);
     if (result.new_id) {
       sessionStorage.setItem("__edit_restore_selection", result.new_id);
+      sessionStorage.removeItem("__edit_restore_table_mode");
     }
     flash("Duplicated element.", { kind: "success" });
     reloadAfterMutation({ delay: 220 });
@@ -417,6 +429,11 @@ export function initEvents() {
     }
     e.preventDefault();
     e.stopPropagation();
+    const edgeSelectionMode = tableEdgeSelectionModeFromEvent(e, el);
+    if (edgeSelectionMode) {
+      selectElement(el, edgeSelectionMode);
+      return;
+    }
     const target = targetFor(el);
     if (target && target.kind === "svg-item") {
       if (state.selected !== el) selectElement(el);
@@ -466,6 +483,11 @@ export function initEvents() {
       if (!dom.commentBox.hidden) { e.preventDefault(); dom.commentBox.hidden = true; return; }
       if (!dom.tableMenu.hidden)  { e.preventDefault(); dom.tableMenu.hidden = true; return; }
       if (!dom.helpOverlay.hidden){ e.preventDefault(); toggleHelp(false); return; }
+      if (state.tableSelectionMode && state.selected) {
+        e.preventDefault();
+        selectElement(state.selected);
+        return;
+      }
       if (state.selected)  { e.preventDefault(); deselect(); return; }
       return;
     }
@@ -512,6 +534,20 @@ export function initEvents() {
 
     if (!state.selected) return;
 
+    if (e.key === " " && state.selected && gridCellFrom(state.selected)) {
+      if (e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        selectTableDimension("row");
+        return;
+      }
+      if ((e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey)
+          || (e.altKey && !e.metaKey && !e.ctrlKey && !e.shiftKey)) {
+        e.preventDefault();
+        selectTableDimension("column");
+        return;
+      }
+    }
+
     const gridArrow = !e.altKey && !e.ctrlKey && !e.shiftKey
       && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key)
       && gridCellFrom(state.selected)
@@ -540,6 +576,17 @@ export function initEvents() {
 
   // --- toolbar / popovers / drag handle / resize handles ------------------
   dom.dragBtn.addEventListener("mousedown", beginDrag);
+
+  dom.rowHandle.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    selectTableDimension("row");
+  });
+  dom.colHandle.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    selectTableDimension("column");
+  });
 
   dom.selectBox.addEventListener("mousedown", (e) => {
     const handle = e.target && e.target.closest && e.target.closest("[data-handle]");

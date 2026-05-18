@@ -19,6 +19,15 @@
   flex-direction: column;
   gap: 4px;
 }
+#__edit_tablemenu[data-mode="row"] [data-table-group="column"],
+#__edit_tablemenu[data-mode="column"] [data-table-group="row"] {
+  display: none;
+}
+#__edit_tablemenu[data-mode="row"],
+#__edit_tablemenu[data-mode="column"] {
+  grid-template-columns: 1fr;
+  width: 180px;
+}
 #__edit_tablemenu .label {
   color: #6b7280;
   font-size: 11px;
