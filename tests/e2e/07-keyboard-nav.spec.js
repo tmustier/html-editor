@@ -1145,4 +1145,229 @@ test.describe("keyboard navigation + adversarial flows", () => {
       await editor.cleanup();
     }
   });
+
+  // ------------------------------------------------------------------
+  // v0.1.7: actions on a multi-cell range (copy / paste / clear / cut)
+  // ------------------------------------------------------------------
+
+  async function rangeCellTexts(page) {
+    return await page.evaluate(() => window.__edit.rangeCells());
+  }
+
+  async function readCellText(page, editId) {
+    return await page.evaluate((id) => {
+      const el = document.querySelector(`[data-edit-id="${id}"]`);
+      return el ? (el.innerText || el.textContent || "").trim() : null;
+    }, editId);
+  }
+
+  test("rangeCells() exposes the active range in row-major order", async ({ page }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+      await selectCell(page, "Alpha");
+      await page.keyboard.press("Shift+ArrowRight");
+      await page.keyboard.press("Shift+ArrowDown");
+      expect(await rangeCellTexts(page)).toEqual([
+        ["Alpha", "Beta"],
+        ["Delta", "Epsilon"],
+      ]);
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("Delete on a 2x2 range clears every cell as one undoable op", async ({ page }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+      await selectCell(page, "Alpha");
+      await page.keyboard.press("Shift+ArrowRight");
+      await page.keyboard.press("Shift+ArrowDown");
+      await page.keyboard.press("Delete");
+      await page.waitForFunction(() => {
+        const cells = window.__edit.rangeCells().flat();
+        return cells.every((t) => t === "");
+      });
+      // Cells outside the range untouched.
+      expect(await readCellText(page, "e7")).toBe("Gamma");
+      expect(await readCellText(page, "e15")).toBe("Iota");
+      // One undo restores all four cells.
+      await page.keyboard.press("Meta+z");
+      await page.waitForFunction(() =>
+        document.querySelector('[data-edit-id="e5"]').textContent.trim() === "Alpha");
+      expect(await readCellText(page, "e5")).toBe("Alpha");
+      expect(await readCellText(page, "e6")).toBe("Beta");
+      expect(await readCellText(page, "e9")).toBe("Delta");
+      expect(await readCellText(page, "e10")).toBe("Epsilon");
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("Backspace on a 2x2 range matches Delete behavior", async ({ page }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+      await selectCell(page, "Alpha");
+      await page.keyboard.press("Shift+ArrowRight");
+      await page.keyboard.press("Shift+ArrowDown");
+      await page.keyboard.press("Backspace");
+      await page.waitForFunction(() => {
+        const cells = window.__edit.rangeCells().flat();
+        return cells.every((t) => t === "");
+      });
+      expect(await readCellText(page, "e5")).toBe("");
+      expect(await readCellText(page, "e10")).toBe("");
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("Cmd+X on a 2x2 range clears the cells (cut)", async ({ page, context }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    const editor = await startEditor("table-grid.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+      await selectCell(page, "Alpha");
+      await page.keyboard.press("Shift+ArrowRight");
+      await page.keyboard.press("Shift+ArrowDown");
+      await page.keyboard.press("Meta+x");
+      await page.waitForFunction(() => {
+        const cells = window.__edit.rangeCells().flat();
+        return cells.every((t) => t === "");
+      });
+      // The other two cells in row 1 + row 2 stay untouched.
+      expect(await readCellText(page, "e7")).toBe("Gamma");
+      expect(await readCellText(page, "e15")).toBe("Iota");
+      // Cmd+Z restores all four cells in one step.
+      await page.keyboard.press("Meta+z");
+      await page.waitForFunction(() =>
+        document.querySelector('[data-edit-id="e5"]').textContent.trim() === "Alpha");
+      expect(await readCellText(page, "e5")).toBe("Alpha");
+      expect(await readCellText(page, "e10")).toBe("Epsilon");
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("F2 on a range collapses to the anchor cell and enters edit mode", async ({ page }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+      await selectCell(page, "Alpha");
+      await page.keyboard.press("Shift+ArrowRight");
+      await page.keyboard.press("Shift+ArrowDown");
+      expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("range");
+      await page.keyboard.press("F2");
+      await page.waitForFunction(() => !!document.querySelector(".__edit_editing"));
+      // Range cleared, anchor ("Alpha") is the edit target.
+      expect(await page.evaluate(() => window.__edit.tableRange())).toBeNull();
+      expect(await page.evaluate(() => window.__edit.selectionMode())).toBeNull();
+      expect(await selectedText(page)).toBe("Alpha");
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("`c` on a range collapses to the anchor and opens the comment composer", async ({ page }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+      await selectCell(page, "Alpha");
+      await page.keyboard.press("Shift+ArrowRight");
+      await page.keyboard.press("Shift+ArrowDown");
+      await page.keyboard.press("c");
+      await page.waitForSelector("#__edit_commentbox:not([hidden])");
+      // Range cleared.
+      expect(await page.evaluate(() => window.__edit.tableRange())).toBeNull();
+      expect(await page.evaluate(() => window.__edit.selectionMode())).toBeNull();
+      // Anchor cell still selected.
+      expect(await selectedText(page)).toBe("Alpha");
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("Range Delete keeps inline wrappers like status badges intact", async ({ page }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+      // Build a range over the badge column of the status-grid table.
+      await page.evaluate(() => {
+        const el = document.querySelector('[data-edit-id="e23"]');
+        window.__edit.select(el);
+      });
+      await page.keyboard.press("Shift+ArrowDown");
+      expect(await page.evaluate(() => window.__edit.rangeCells()))
+        .toEqual([["SHIPPED"], ["PARTIAL"]]);
+      await page.keyboard.press("Delete");
+      await page.waitForFunction(() => {
+        const cells = window.__edit.rangeCells().flat();
+        return cells.every((t) => t === "");
+      });
+      // Wrappers survived for both rows.
+      const wrappers = await page.evaluate(() => {
+        const td22 = document.querySelector('[data-edit-id="e22"]');
+        const td26 = document.querySelector('[data-edit-id="e26"]');
+        return [td22?.innerHTML, td26?.innerHTML];
+      });
+      expect(wrappers[0]).toMatch(/class="status-badge shipped"[^>]*><\/span>$/);
+      expect(wrappers[1]).toMatch(/class="status-badge partial"[^>]*><\/span>$/);
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("Delete on a 1x1 range (collapsed) is a no-op (single-cell delete not wired)", async ({ page }) => {
+    // Sanity guard: we only wired Delete in 'range' mode. A plain single-cell
+    // selection should still leave the cell text untouched.
+    const editor = await startEditor("table-grid.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+      await selectCell(page, "Alpha");
+      await page.keyboard.press("Delete");
+      await page.waitForTimeout(120);
+      expect(await readCellText(page, "e5")).toBe("Alpha");
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  // Clipboard-write tests use the writeText path via Playwright permissions.
+  // We focus on the *behavior* (paste back into the same table fans out into
+  // a range) rather than directly observing system clipboard contents, since
+  // playwright's clipboard model is sandboxed.
+  test("Cmd+C then Cmd+V on a fresh anchor pastes the range row-major", async ({ page, context }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    const editor = await startEditor("table-grid.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+      await selectCell(page, "Alpha");
+      await page.keyboard.press("Shift+ArrowRight"); // range Alpha + Beta
+      await page.keyboard.press("Meta+c");
+      // Flash shows count.
+      await expect(page.locator("#__edit_status")).toContainText("Copied");
+      // Select Delta (row 1, col 0) and paste — should fill Delta + Epsilon.
+      await selectCell(page, "Delta");
+      // Force-set selection mode none so paste lands on the cell.
+      await page.keyboard.press("Meta+v");
+      await page.waitForFunction(() =>
+        document.querySelector('[data-edit-id="e9"]').textContent.trim() === "Alpha");
+      expect(await readCellText(page, "e9")).toBe("Alpha");
+      expect(await readCellText(page, "e10")).toBe("Beta");
+      expect(await readCellText(page, "e11")).toBe("Zeta"); // outside the 1x2 paste
+    } finally {
+      await editor.cleanup();
+    }
+  });
 });

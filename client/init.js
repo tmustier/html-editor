@@ -12,6 +12,7 @@ import {
   navigateGrid,
   placeBox,
   placeToolbar,
+  tableRangeMatrix,
   toggleHelp,
 } from "./targets.js";
 import { beginDrag } from "./drag.js";
@@ -78,6 +79,8 @@ export function initRuntime() {
       const { anchor, focus } = state.tableRange;
       return { anchor: { ...anchor }, focus: { ...focus } };
     },
+    rangeCells: () => tableRangeMatrix().map((row) =>
+      row.map((el) => (el ? (el.innerText || el.textContent || "").trim() : null))),
     undo: () => performHistory("undo"),
     redo: () => performHistory("redo"),
   };

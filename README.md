@@ -62,6 +62,9 @@ Comments are stored next to the HTML file in `<file>.comments.json`.
 | `Cmd+Arrow keys` | Jump to the edge of the current table row/column |
 | `Shift+Space` / `Ctrl+Space` | Select the current table row / column (`Option+Space` also selects column). Works inside edit mode — commits the cell, then promotes. |
 | `Shift`+arrows | Extend an Excel-style cell range from the anchor cell |
+| `Cmd+C` / `Cmd+V` on a range | Copy / paste the range as TSV + HTML (clipped at the destination table) |
+| `Cmd+X` on a range | Cut every cell in the range (copy + clear, one undo) |
+| `Delete` / `Backspace` on a range | Clear every cell in the range (one undo) |
 | Row + `Ctrl+Space` or Column + `Shift+Space` | Escalate to whole-table selection (Esc steps back down) |
 | Row/column handles | Click the left/top table handles to select a row or column; drag to reorder |
 | `+` edge zones | Hover the table's right or bottom edge to append a column or row |

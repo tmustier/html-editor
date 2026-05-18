@@ -348,6 +348,55 @@ export function tableColSpanCells(el) {
   return uniqueCells(out);
 }
 
+// Range bounds for `state.tableRange` (or null if there's no active range).
+// Always returns rows/cols in canonical (min..max) order.
+export function rangeBounds(range = state.tableRange) {
+  if (!range) return null;
+  return {
+    table: range.table,
+    r1: Math.min(range.anchor.row, range.focus.row),
+    r2: Math.max(range.anchor.row, range.focus.row),
+    c1: Math.min(range.anchor.col, range.focus.col),
+    c2: Math.max(range.anchor.col, range.focus.col),
+  };
+}
+
+// 2D matrix of *text-editable* target elements covering the active range.
+// Returns [] when there's no usable range. Missing cells become `null`
+// (callers should treat them as no-ops).
+export function tableRangeMatrix(range = state.tableRange) {
+  const bounds = rangeBounds(range);
+  if (!bounds) return [];
+  const cell = gridCellFrom(state.selected);
+  const grid = cell && gridForCell(cell);
+  if (!grid || grid.table !== bounds.table) return [];
+  const { matrix } = grid;
+  const out = [];
+  for (let r = bounds.r1; r <= bounds.r2; r += 1) {
+    const row = [];
+    for (let c = bounds.c1; c <= bounds.c2; c += 1) {
+      const targetCell = matrix[r] && matrix[r][c];
+      const target = targetCell ? selectableInCell(targetCell) : null;
+      row.push(target && isTextEditableElement(target) ? target : null);
+    }
+    out.push(row);
+  }
+  return out;
+}
+
+// Anchor target element (top-left of the range or just the active cell).
+export function rangeAnchorElement(range = state.tableRange) {
+  const bounds = rangeBounds(range);
+  if (!bounds) return state.selected || null;
+  const cell = gridCellFrom(state.selected);
+  const grid = cell && gridForCell(cell);
+  if (!grid || grid.table !== bounds.table) return state.selected || null;
+  const anchorCell = grid.matrix[bounds.r1] && grid.matrix[bounds.r1][bounds.c1];
+  if (!anchorCell) return state.selected || null;
+  const target = selectableInCell(anchorCell);
+  return target && isTextEditableElement(target) ? target : null;
+}
+
 // Mutate `state.tableRange` to extend the focus corner by one cell.
 // Returns true if a visible change happened.
 export function extendTableRange(direction) {

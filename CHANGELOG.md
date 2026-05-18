@@ -4,6 +4,37 @@ All notable changes to `html-editor` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project follows
 [Semantic Versioning](https://semver.org/).
 
+## 0.1.7 — 2026-05-18
+
+### Added
+
+- **Range copy / paste / clear / cut.** Once you've extended a `Shift+Arrow`
+  cell range, every Excel-style action now works on it:
+  - `Cmd+C` copies the range as TSV (plain text) + a minimal `<table>` HTML
+    fragment — paste cleanly into Excel/Numbers/Google Sheets, or back into
+    the editor as a range.
+  - `Cmd+V` pastes TSV/HTML into the range starting at the top-left anchor
+    cell, clipped at the destination table's edge.
+  - `Cmd+X` cuts the range (copy then clear) in a single undo step.
+  - `Delete` / `Backspace` clears every cell in the range in a single undo
+    step.
+- **F2 / Enter / `e` on a range** — collapses to the anchor cell and enters
+  edit mode.
+- **`c` on a range** — collapses to the anchor cell and opens the comment
+  composer.
+- **Better `+` append pills** — 22 px tall (up from 16), visible at rest with
+  a faint dashed border, glyph optically centered, proximity buffer bumped
+  to 28 px so the cursor can travel from the table onto the pill without it
+  disappearing.
+
+### Notes
+
+- Plain `Delete` on a single cell is still a no-op by design (Excel doesn't
+  clear a single cell with Delete either — you'd hit `F2` to edit).
+- Multi-row / multi-column structural ops (insert/delete row, cut-paste
+  rows) still act on the first row/column only with a toast hint — same as
+  v0.1.6.
+
 ## 0.1.6 — 2026-05-18
 
 ### Added

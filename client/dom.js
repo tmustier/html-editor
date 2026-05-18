@@ -88,7 +88,9 @@ export function initDom() {
           <tr><td><kbd>Drag edge</kbd></td><td>Resize HTML element (E / S / SE handles)</td></tr>
           <tr><td><kbd>F2</kbd> / <kbd>Enter</kbd> / <kbd>E</kbd></td><td>Edit selected text/label</td></tr>
           <tr><td><kbd>C</kbd></td><td>Add a comment</td></tr>
-          <tr><td><kbd>Cmd</kbd><kbd>C</kbd> / <kbd>Cmd</kbd><kbd>V</kbd></td><td>Copy / paste the selected text box or table cell; Excel-style ranges fill existing table cells and clip at the edge</td></tr>
+          <tr><td><kbd>Cmd</kbd><kbd>C</kbd> / <kbd>Cmd</kbd><kbd>V</kbd></td><td>Copy / paste the selected text box, table cell, or multi-cell range (TSV + HTML; clipped to the destination table)</td></tr>
+          <tr><td><kbd>Cmd</kbd><kbd>X</kbd> on a range</td><td>Cut every cell in the range (copy then clear in one undo step)</td></tr>
+          <tr><td><kbd>Delete</kbd> / <kbd>Backspace</kbd> on a range</td><td>Clear every cell in the range in one undo step</td></tr>
           <tr><td><kbd>Drag border</kbd> / <kbd>Drag handle</kbd></td><td>Reorder HTML or reposition diagram item</td></tr>
           <tr><td><kbd>Duplicate</kbd> button</td><td>Clone the selected element with fresh edit IDs</td></tr>
           <tr><td><kbd>Cmd</kbd><kbd>Z</kbd></td><td>Undo last saved edit or move</td></tr>

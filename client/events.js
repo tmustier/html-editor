@@ -21,10 +21,13 @@ import {
   placeBox,
   placeTableAddZones,
   placeToolbar,
+  rangeAnchorElement,
+  rangeBounds,
   refreshTableAddZones,
   selectElementInternal,
   selectTableDimension,
   tableEdgeSelectionModeFromEvent,
+  tableRangeMatrix,
   targetFor,
   toggleHelp,
 } from "./targets.js";
@@ -448,9 +451,82 @@ async function writeClipboardPayload(text, html) {
   ta.remove();
 }
 
+function escapeTsvCell(value) {
+  const text = String(value == null ? "" : value);
+  if (/[\t\n\r"]/.test(text)) {
+    return '"' + text.replace(/"/g, '""') + '"';
+  }
+  return text;
+}
+
+function escapeHtmlText(value) {
+  return String(value == null ? "" : value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function rangeCellText(targetEl) {
+  if (!targetEl) return "";
+  return (targetEl.innerText || targetEl.textContent || "")
+    .replace(/\u00a0/g, " ")
+    .trim();
+}
+
+// Build TSV + minimal HTML table for the active range. Returns null if no
+// usable matrix is available.
+function rangeClipboardPayload() {
+  const matrix = tableRangeMatrix();
+  if (!matrix.length) return null;
+  const text = matrix
+    .map((row) => row.map((el) => escapeTsvCell(rangeCellText(el))).join("\t"))
+    .join("\n");
+  const htmlRows = matrix
+    .map((row) => "<tr>" + row.map((el) =>
+      `<td>${escapeHtmlText(rangeCellText(el))}</td>`).join("") + "</tr>")
+    .join("");
+  const html = `<table>${htmlRows}</table>`;
+  return { text, html, matrix };
+}
+
 async function copySelectionToClipboard() {
+  if (state.tableSelectionMode === "range") {
+    const payload = rangeClipboardPayload();
+    if (payload) {
+      await writeClipboardPayload(payload.text, payload.html);
+      const count = payload.matrix.reduce((sum, r) =>
+        sum + r.filter(Boolean).length, 0);
+      flash(`Copied ${count} cell${count === 1 ? "" : "s"}.`,
+        { kind: "success", timeout: 900 });
+      return;
+    }
+  }
   await writeClipboardPayload(selectedPlainText(), selectedHtml());
   flash("Copied.", { kind: "success", timeout: 900 });
+}
+
+// Clear every editable cell in the current range with a single batch save.
+// Returns the number of cleared cells (0 means nothing to do).
+//
+// Reuses `applyPlainTextToElement` so cells with a single inline wrapper
+// (status badges, runner pills, etc.) keep the wrapper and only have their
+// text content cleared.
+async function clearRangeCells() {
+  const matrix = tableRangeMatrix();
+  if (!matrix.length) return 0;
+  const updates = [];
+  matrix.forEach((row) => row.forEach((el) => {
+    if (!el) return;
+    updates.push(applyPlainTextToElement(el, ""));
+  }));
+  if (!updates.length) return 0;
+  // Refresh selection visuals so the toolbar/box stay aligned.
+  if (state.selected) {
+    placeBox(dom.selectBox, state.selected);
+    placeToolbar(state.selected);
+  }
+  await api.saveTextMany(updates);
+  return updates.length;
 }
 
 async function pasteIntoSelection({ text = "", html = "" } = {}) {
@@ -520,16 +596,90 @@ async function readClipboardPayload() {
 
 async function pasteFromClipboard() {
   try {
-    await pasteIntoSelection(await readClipboardPayload());
+    const payload = await readClipboardPayload();
+    if (state.tableSelectionMode === "range") {
+      // Anchor the paste on the range's top-left cell so range-paste fans out.
+      const anchor = rangeAnchorElement();
+      if (anchor) {
+        state.tableRange = null;
+        state.tableSelectionMode = null;
+        selectElementInternal(anchor);
+      }
+    }
+    await pasteIntoSelection(payload);
   } catch (err) {
     flash(err.message || "Clipboard paste is not available here.", { kind: "warning" });
   }
+}
+
+async function cutRangeToClipboard() {
+  const payload = rangeClipboardPayload();
+  if (!payload) {
+    flash("Nothing to cut.", { kind: "warning" });
+    return;
+  }
+  try {
+    await writeClipboardPayload(payload.text, payload.html);
+  } catch (_err) {
+    flash("Couldn't write to clipboard.", { kind: "warning" });
+    return;
+  }
+  try {
+    const cleared = await clearRangeCells();
+    flash(`Cut ${cleared} cell${cleared === 1 ? "" : "s"}.`,
+      { kind: "success", timeout: 1000 });
+  } catch (err) {
+    flash("Cut failed: " + err.message, { kind: "error" });
+    reloadAfterMutation({ delay: 600 });
+  }
+}
+
+async function deleteRangeContents() {
+  try {
+    const cleared = await clearRangeCells();
+    if (!cleared) {
+      flash("Nothing to clear.", { kind: "warning" });
+      return;
+    }
+    flash(`Cleared ${cleared} cell${cleared === 1 ? "" : "s"}.`,
+      { kind: "success", timeout: 900 });
+  } catch (err) {
+    flash("Clear failed: " + err.message, { kind: "error" });
+    reloadAfterMutation({ delay: 600 });
+  }
+}
+
+// Drop the active range and re-anchor selection on a single cell. Used to
+// route follow-up actions (edit, comment) through the normal single-cell
+// code paths.
+function collapseRangeToAnchor() {
+  if (state.tableSelectionMode !== "range") return false;
+  const anchor = rangeAnchorElement();
+  if (!anchor) return false;
+  state.tableRange = null;
+  state.tableSelectionMode = null;
+  selectElementInternal(anchor);
+  return true;
 }
 
 export function initEvents() {
   // --- clipboard ----------------------------------------------------------
   document.addEventListener("copy", (e) => {
     if (!state.selected || state.editing || isNativeClipboardTarget(e.target)) return;
+    if (state.tableSelectionMode === "range") {
+      // Excel-style multi-cell copy: TSV plus a minimal <table> HTML.
+      if (!e.clipboardData) return;
+      const payload = rangeClipboardPayload();
+      if (!payload) return;
+      e.preventDefault();
+      e.clipboardData.setData("text/plain", payload.text);
+      e.clipboardData.setData("text/html", payload.html);
+      const count = payload.matrix.reduce((sum, r) =>
+        sum + r.filter(Boolean).length, 0);
+      flash(`Copied ${count} cell${count === 1 ? "" : "s"}.`,
+        { kind: "success", timeout: 900 });
+      return;
+    }
     if (state.tableSelectionMode) return; // row/column selection keeps clipboard scoped to cut
     if (!e.clipboardData) return;
     e.preventDefault();
@@ -540,6 +690,29 @@ export function initEvents() {
 
   document.addEventListener("paste", (e) => {
     if (!state.selected || state.editing || isNativeClipboardTarget(e.target)) return;
+    if (state.tableSelectionMode === "range") {
+      // Range mode owns Cmd+V: route through the Excel-style range-paste
+      // path anchored on the range's top-left cell.
+      const anchor = rangeAnchorElement();
+      if (!anchor) return;
+      const text = e.clipboardData && e.clipboardData.getData("text/plain");
+      const html = e.clipboardData && e.clipboardData.getData("text/html");
+      if (typeof text !== "string" && typeof html !== "string") return;
+      e.preventDefault();
+      // Drop the range so the paste lands on the anchor cell (range-paste
+      // logic already clips to the table). The visual will be reanchored
+      // by reloadAfterMutation if the paste fans out.
+      const stash = state.tableRange;
+      state.tableRange = null;
+      state.tableSelectionMode = null;
+      selectElementInternal(anchor);
+      void pasteIntoSelection({ text: text || "", html: html || "" }).catch(() => {
+        // If something went wrong, restore the prior range so the user can retry.
+        state.tableRange = stash;
+        state.tableSelectionMode = stash ? "range" : null;
+      });
+      return;
+    }
     if (state.tableSelectionMode) {
       // Row/column selection owns Cmd+V (cut-paste move). Never let the
       // generic value-paste path race with it.
@@ -718,6 +891,26 @@ export function initEvents() {
       return;
     }
 
+    // Range-aware delete / backspace: clear every cell in one batch.
+    if ((e.key === "Backspace" || e.key === "Delete")
+        && state.tableSelectionMode === "range" && state.selected
+        && !inEditableField && !state.editing) {
+      e.preventDefault();
+      e.stopPropagation();
+      void deleteRangeContents();
+      return;
+    }
+
+    // Range-aware Cmd+X: copy then clear in one trip.
+    if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && key === "x"
+        && state.tableSelectionMode === "range" && state.selected
+        && !inEditableField && !state.editing) {
+      e.preventDefault();
+      e.stopPropagation();
+      void cutRangeToClipboard();
+      return;
+    }
+
     // Excel-style row/column cut on Cmd/Ctrl+X.
     const cutKey = (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && key === "x";
     const singleLineSelection = state.tableSelectionMode === "row"
@@ -878,10 +1071,18 @@ export function initEvents() {
 
     const unmodified = !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey;
     if (e.key === "F2" || (unmodified && (e.key === "Enter" || key === "e"))) {
-      e.preventDefault(); startEdit(); return;
+      e.preventDefault();
+      // In range mode, collapse to anchor cell before entering edit.
+      if (state.tableSelectionMode === "range") collapseRangeToAnchor();
+      startEdit();
+      return;
     }
     if (unmodified && key === "c") {
-      e.preventDefault(); startComment(); return;
+      e.preventDefault();
+      // In range mode, collapse to anchor cell before starting the comment.
+      if (state.tableSelectionMode === "range") collapseRangeToAnchor();
+      startComment();
+      return;
     }
     if (e.altKey) {
       if (e.key === "ArrowLeft")  { e.preventDefault(); navigate("left");  return; }
