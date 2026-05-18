@@ -105,7 +105,7 @@ html.__edit_dragging-line #__edit_table_col_handle {
 #__edit_table_drop[data-axis="row"] { height: 3px; }
 #__edit_table_drop[data-axis="column"] { width: 3px; }
 
-/* Excel-style moving source outline for staged Cmd+X cuts.
+/* Excel-style moving source outline for staged row/column copies and Cmd+X cuts.
    Kept separate from #__edit_select so the active selection can move to a
    destination while the transparent marching border stays on the source. */
 @keyframes __edit_marching_ants {

@@ -23,6 +23,10 @@ export const state = {
   // Pending Excel-style cut: staged source + payload, committed by paste/insert.
   // { kind: "range"|"row"|"column", tableId, source, payload, createdAt } | null
   cut: null,
+  // Pending Excel-style row/column copy. Allows Cmd+Shift+= to insert copied
+  // cells/rows structurally while normal Cmd+V still uses the system clipboard.
+  // { kind: "row"|"column", tableId, source, payload, createdAt } | null
+  lineCopy: null,
   hoveredTable: null,        // table currently under cursor for "+" append zones
   mouseX: -1,                // last known viewport mouse position ("+" zone proximity)
   mouseY: -1,

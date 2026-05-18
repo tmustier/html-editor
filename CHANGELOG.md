@@ -6,7 +6,14 @@ All notable changes to `html-editor` are documented here. The format follows
 
 ## Unreleased
 
-_No unreleased changes yet._
+### Added
+
+- `Cmd/Ctrl+C` on a selected row or column now copies the whole line as TSV +
+  HTML, so `Cmd/Ctrl+V` into another row/column fills every copied cell instead
+  of only the anchor cell.
+- `Cmd/Ctrl+C` followed by `Cmd/Ctrl+Shift+=` now inserts copied rows/columns
+  structurally before the current row/column, preserving copied cell markup and
+  assigning fresh edit IDs instead of inserting an empty line.
 
 ## 0.1.8 — 2026-05-18
 

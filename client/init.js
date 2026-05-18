@@ -84,6 +84,7 @@ export function initRuntime() {
     rangeCells: () => tableRangeMatrix().map((row) =>
       row.map((el) => (el ? (el.innerText || el.textContent || "").trim() : null))),
     cut: () => state.cut ? JSON.parse(JSON.stringify(state.cut)) : null,
+    lineCopy: () => state.lineCopy ? JSON.parse(JSON.stringify(state.lineCopy)) : null,
     undo: () => performHistory("undo"),
     redo: () => performHistory("redo"),
   };

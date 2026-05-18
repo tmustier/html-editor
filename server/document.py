@@ -346,12 +346,18 @@ def update_text_many(
 
 TABLE_ACTIONS = {
     "row-insert-before", "row-insert-after", "row-delete",
+    "row-copy-before", "row-copy-after",
     "row-move-up", "row-move-down", "row-move-to",
     "col-insert-before", "col-insert-after", "col-delete",
+    "col-copy-before", "col-copy-after",
     "col-move-left", "col-move-right", "col-move-to",
 }
 
 TABLE_ACTIONS_NEED_TARGET = {"row-move-to", "col-move-to"}
+TABLE_ACTIONS_NEED_SOURCE = {
+    "row-copy-before", "row-copy-after",
+    "col-copy-before", "col-copy-after",
+}
 
 ROW_GROUP_TAGS = {"thead", "tbody", "tfoot"}
 
@@ -470,6 +476,7 @@ def table_operation(
     action: str,
     *,
     target_index: Optional[int] = None,
+    source_cell_id: Optional[str] = None,
     mode: str = "before",
     include_table_html: bool = False,
     include_table_patch: bool = False,
@@ -484,6 +491,9 @@ def table_operation(
         if mode not in {"before", "after"}:
             return False, {"status": 400, "error":
                 "mode must be 'before' or 'after'"}
+    if action in TABLE_ACTIONS_NEED_SOURCE and not source_cell_id:
+        return False, {"status": 400, "error":
+            f"{action} requires source_cell_id"}
     ok, geometry = _table_geometry(soup, cell_id)
     if not ok:
         return ok, geometry
@@ -494,6 +504,15 @@ def table_operation(
     ):
         return False, {"status": 400, "error":
             "column structure edits don't support tables with colgroup/col yet"}
+
+    source_geometry: Optional[dict] = None
+    if action in TABLE_ACTIONS_NEED_SOURCE:
+        ok, source_geometry = _table_geometry(soup, str(source_cell_id))
+        if not ok:
+            return ok, source_geometry
+        if source_geometry["table"] is not table:
+            return False, {"status": 400, "error":
+                "can't insert copied rows or columns across tables yet"}
 
     rows: list[Tag] = geometry["rows"]
     grid: list[list[Tag]] = geometry["grid"]
@@ -508,6 +527,26 @@ def table_operation(
 
     if action == "row-insert-before" or action == "row-insert-after":
         new_row = _blank_clone(row)
+        if action.endswith("before"):
+            row.insert_before(new_row)
+        else:
+            row.insert_after(new_row)
+        assign_missing_edit_ids(soup)
+        new_cells = _row_cells(new_row)
+        selection = new_cells[min(col_index, len(new_cells) - 1)] if new_cells else new_row
+        patch = {
+            "kind": "row-insert",
+            "table_id": table_id,
+            "parent_id": new_row.parent.get("data-edit-id") if isinstance(new_row.parent, Tag) else None,
+            "index": row_index if action.endswith("before") else row_index + 1,
+            "row_html": str(new_row),
+        }
+
+    elif action == "row-copy-before" or action == "row-copy-after":
+        assert source_geometry is not None
+        source_row = source_geometry["rows"][source_geometry["row_index"]]
+        new_row = copy.deepcopy(source_row)
+        _strip_clone_identity(new_row)
         if action.endswith("before"):
             row.insert_before(new_row)
         else:
@@ -560,6 +599,29 @@ def table_operation(
         for cells in grid:
             reference = cells[col_index]
             new_cell = _blank_clone(reference)
+            if action.endswith("before"):
+                reference.insert_before(new_cell)
+            else:
+                reference.insert_after(new_cell)
+            inserted.append(new_cell)
+        assign_missing_edit_ids(soup)
+        selection = inserted[row_index]
+        patch = {
+            "kind": "col-insert",
+            "table_id": table_id,
+            "index": col_index if action.endswith("before") else col_index + 1,
+            "cells_html": [str(inserted_cell) for inserted_cell in inserted],
+        }
+
+    elif action == "col-copy-before" or action == "col-copy-after":
+        assert source_geometry is not None
+        source_col_index = source_geometry["col_index"]
+        source_grid: list[list[Tag]] = source_geometry["grid"]
+        inserted = []
+        for target_cells, source_cells in zip(grid, source_grid):
+            reference = target_cells[col_index]
+            new_cell = copy.deepcopy(source_cells[source_col_index])
+            _strip_clone_identity(new_cell)
             if action.endswith("before"):
                 reference.insert_before(new_cell)
             else:

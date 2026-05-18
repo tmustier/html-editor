@@ -170,6 +170,7 @@ export async function runTableOperation(cell, action, {
   successMessage = `Table ${action.replace(/-/g, " ")} done.`,
   errorPrefix = "Table change failed",
   reloadDelay = 220,
+  extra = {},
 } = {}) {
   const tableCell = gridCellFrom(cell);
   if (!tableCell) {
@@ -179,7 +180,7 @@ export async function runTableOperation(cell, action, {
   let result;
   try {
     result = await api.tableOperation(tableCell.getAttribute("data-edit-id"), action,
-      { include_table_patch: true });
+      { ...extra, include_table_patch: true });
   } catch (err) {
     flash(`${errorPrefix}: ${err.message}`, { kind: "error", timeout: 3600 });
     return { ok: false, applied: false, result: null };

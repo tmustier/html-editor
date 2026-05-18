@@ -1,12 +1,16 @@
-// Excel-style staged cuts for table rows, columns, and cell ranges.
+// Excel-style staged cuts/copies for table rows, columns, and cell ranges.
 //
 // A cut is a mode, not an immediate mutation: Cmd+X records the source,
 // populates the system clipboard when possible, and paints a persistent
 // source outline. Cmd+V or Cmd+Shift++ commits the move/insert.
+//
+// A row/column copy keeps the same source/payload shape so Cmd+Shift++ can
+// insert copied cells structurally instead of creating blank lines.
 
 import { dom, flash } from "./dom.js";
 import { state } from "./state.js";
 import { runMoveTo } from "./tabledrag.js";
+import { runTableOperation } from "./tableops.js";
 import {
   gridCellFrom,
   gridForElement,
@@ -82,34 +86,44 @@ async function tryWriteClipboard(payload, writeClipboardPayload) {
 }
 
 function setCut(cut) {
+  state.lineCopy = null;
   state.cut = cut;
+  placeCutOverlay();
+}
+
+function setLineCopy(copy) {
+  state.cut = null;
+  state.lineCopy = copy;
   placeCutOverlay();
 }
 
 export function clearCut() {
   state.cut = null;
-  if (dom.cutBox) dom.cutBox.hidden = true;
+  placeCutOverlay();
+}
+
+export function clearLineCopy() {
+  state.lineCopy = null;
+  placeCutOverlay();
 }
 
 export function hasStagedCut(kind = null) {
   return !!state.cut && (!kind || state.cut.kind === kind);
 }
 
-export async function stageLineCut(axis, writeClipboardPayload) {
-  if (!["row", "column"].includes(axis)) return false;
+function lineTransfer(axis) {
+  if (!["row", "column"].includes(axis)) return null;
   const sourceCell = gridCellFrom(state.selected);
   const grid = sourceCell && gridForElement(sourceCell);
-  if (!sourceCell || !grid) return false;
+  if (!sourceCell || !grid) return null;
   const tableId = tableIdFor(sourceCell);
   const index = axis === "row"
     ? tableRowIndexOf(sourceCell)?.index
     : grid.position.col;
-  if (index == null) return false;
-
+  if (index == null) return null;
   const cells = lineCells(axis, sourceCell);
   const payload = linePayload(axis, cells);
-  const clipboardOk = await tryWriteClipboard(payload, writeClipboardPayload);
-  setCut({
+  return {
     kind: axis,
     tableId,
     source: {
@@ -121,13 +135,35 @@ export async function stageLineCut(axis, writeClipboardPayload) {
     },
     payload,
     createdAt: Date.now(),
-  });
+  };
+}
+
+export async function stageLineCut(axis, writeClipboardPayload) {
+  const transfer = lineTransfer(axis);
+  if (!transfer) return false;
+  const clipboardOk = await tryWriteClipboard(transfer.payload, writeClipboardPayload);
+  setCut(transfer);
   flash(
     (axis === "row" ? "Row" : "Column")
       + (clipboardOk
         ? " cut — select a destination and paste or insert."
         : " cut staged; system clipboard unavailable."),
     { kind: clipboardOk ? "info" : "warning", timeout: 1800 },
+  );
+  return true;
+}
+
+export async function stageLineCopy(axis, writeClipboardPayload) {
+  const transfer = lineTransfer(axis);
+  if (!transfer) return false;
+  const clipboardOk = await tryWriteClipboard(transfer.payload, writeClipboardPayload);
+  setLineCopy(transfer);
+  flash(
+    (axis === "row" ? "Row" : "Column")
+      + (clipboardOk
+        ? " copied — paste values or press Cmd+Shift+= to duplicate."
+        : " copied inside the editor; system clipboard unavailable."),
+    { kind: clipboardOk ? "success" : "warning", timeout: 1800 },
   );
   return true;
 }
@@ -235,6 +271,30 @@ export async function commitLineCutInsertBeforeSelection() {
   return ok;
 }
 
+export async function commitLineCopyInsertBeforeSelection() {
+  const copy = state.lineCopy;
+  if (!copy || !["row", "column"].includes(copy.kind)) return false;
+  if (state.tableSelectionMode !== copy.kind) {
+    flash(`Select a ${copy.kind} destination first (Shift+Space / Ctrl+Space).`,
+      { kind: "warning" });
+    return false;
+  }
+  if (currentTableId() !== copy.tableId) {
+    flash("Can't insert copied rows or columns across tables yet.", { kind: "warning" });
+    return false;
+  }
+  const targetCell = gridCellFrom(state.selected);
+  if (!targetCell) return false;
+  const action = copy.kind === "row" ? "row-copy-before" : "col-copy-before";
+  return runTableOperation(targetCell, action, {
+    restoreMode: copy.kind,
+    successMessage: copy.kind === "row" ? "Row duplicated." : "Column duplicated.",
+    errorPrefix: "Duplicate failed",
+    reloadDelay: 200,
+    extra: { source_cell_id: copy.source.cellId },
+  });
+}
+
 function sourceCellForCut(cut) {
   const id = cut?.source?.cellId;
   return id ? document.querySelector(`[data-edit-id="${CSS.escape(id)}"]`) : null;
@@ -280,14 +340,15 @@ function unionDocumentRect(elements) {
 
 export function placeCutOverlay() {
   if (!dom.cutBox) return;
-  const cut = state.cut;
-  if (!cut) { dom.cutBox.hidden = true; return; }
-  const cells = cellsForCut(cut);
+  const transfer = state.cut || state.lineCopy;
+  if (!transfer) { dom.cutBox.hidden = true; return; }
+  const cells = cellsForCut(transfer);
   const rect = unionDocumentRect(cells);
   if (!rect) { dom.cutBox.hidden = true; return; }
   const box = dom.cutBox;
   box.hidden = false;
-  box.dataset.kind = cut.kind;
+  box.dataset.kind = transfer.kind;
+  box.dataset.transfer = state.cut ? "cut" : "copy";
   box.style.display = "block";
   box.style.left = (rect.left - 2) + "px";
   box.style.top = (rect.top - 2) + "px";

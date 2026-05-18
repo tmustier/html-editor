@@ -89,9 +89,9 @@ export function initDom() {
           <tr><td><kbd>Drag edge</kbd></td><td>Resize HTML element (E / S / SE handles)</td></tr>
           <tr><td><kbd>F2</kbd> / <kbd>Enter</kbd> / <kbd>E</kbd></td><td>Edit selected text/label</td></tr>
           <tr><td><kbd>C</kbd></td><td>Add a comment</td></tr>
-          <tr><td><kbd>Cmd</kbd><kbd>C</kbd> / <kbd>Cmd</kbd><kbd>V</kbd></td><td>Copy / paste the selected text box, table cell, or multi-cell range (TSV + HTML; clipped to the destination table)</td></tr>
+          <tr><td><kbd>Cmd</kbd><kbd>C</kbd> / <kbd>Cmd</kbd><kbd>V</kbd></td><td>Copy / paste the selected text box, table cell, range, row, or column (TSV + HTML; clipped to the destination table)</td></tr>
           <tr><td><kbd>Cmd</kbd><kbd>X</kbd> on a row, column, or range</td><td>Stage an Excel-style cut with a moving source outline; paste or insert to commit</td></tr>
-          <tr><td><kbd>Cmd</kbd><kbd>Shift</kbd><kbd>+</kbd> after row/column cut</td><td>Insert the staged cut row/column before the current position</td></tr>
+          <tr><td><kbd>Cmd</kbd><kbd>Shift</kbd><kbd>+</kbd> after row/column copy or cut</td><td>Insert the copied/cut row or column before the current position</td></tr>
           <tr><td><kbd>Delete</kbd> / <kbd>Backspace</kbd> on a range</td><td>Clear every cell in the range in one undo step</td></tr>
           <tr><td><kbd>Drag border</kbd> / <kbd>Drag handle</kbd></td><td>Reorder HTML or reposition diagram item</td></tr>
           <tr><td><kbd>Duplicate</kbd> button</td><td>Clone the selected element with fresh edit IDs</td></tr>
@@ -104,6 +104,7 @@ export function initDom() {
           <tr><td><kbd>Row/column handles</kbd></td><td>Click to select a row or column; drag to reorder</td></tr>
           <tr><td><kbd>+</kbd> edge zones</td><td>Hover the table's right or bottom edge to append a column or row</td></tr>
           <tr><td><kbd>Cmd</kbd><kbd>X</kbd> → <kbd>Cmd</kbd><kbd>V</kbd></td><td>Cut a selected row/column and paste-as-move on another row/column (same table)</td></tr>
+          <tr><td><kbd>Cmd</kbd><kbd>C</kbd> → <kbd>Cmd</kbd><kbd>Shift</kbd><kbd>=</kbd></td><td>Duplicate the copied row/column before the current row/column (same table)</td></tr>
           <tr><td><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>=</kbd></td><td>Insert a row/column before the current selection</td></tr>
           <tr><td><kbd>Ctrl</kbd><kbd>-</kbd></td><td>Delete the selected row/column</td></tr>
           <tr><td><kbd>Table</kbd> button</td><td>Insert, delete, or reorder rows/columns for simple rectangular tables</td></tr>

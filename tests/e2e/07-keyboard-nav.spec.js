@@ -783,6 +783,150 @@ test.describe("keyboard navigation + adversarial flows", () => {
     }
   });
 
+  test("Ctrl+C on a column then Ctrl+V into another column pastes every copied cell", async ({ page, context }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await context.grantPermissions(["clipboard-read", "clipboard-write"], {
+        origin: new URL(editor.url).origin,
+      });
+      await page.goto(editor.url);
+      await waitForEditor(page);
+      await selectCell(page, "Beta");
+      await page.keyboard.press("Control+Space");
+      await page.keyboard.press("Control+C");
+      await page.waitForFunction(() => window.__edit.lineCopy()?.kind === "column");
+      // Select the destination column from its middle cell: paste should anchor
+      // at the top of the selected column, not clip from the focused cell.
+      await selectCell(page, "Zeta");
+      await page.keyboard.press("Control+Space");
+      await page.keyboard.press("Control+V");
+      await page.waitForFunction(() =>
+        document.querySelector('td[data-edit-id="e11"]')?.textContent.trim() === "Epsilon");
+      const rows = await page.locator('table[data-edit-id="e2"] tr').evaluateAll((trs) =>
+        trs.map((tr) => Array.from(tr.cells).map((td) => td.textContent.trim())));
+      expect(rows).toEqual([
+        ["Alpha", "Beta", "Beta"],
+        ["Delta", "Epsilon", "Epsilon"],
+        ["Eta", "Theta", "Theta"],
+      ]);
+      expect(persistedFirstTableRows(editor.readFile())).toEqual(rows);
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("Ctrl+C on a row then Ctrl+V into another row pastes every copied cell", async ({ page, context }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await context.grantPermissions(["clipboard-read", "clipboard-write"], {
+        origin: new URL(editor.url).origin,
+      });
+      await page.goto(editor.url);
+      await waitForEditor(page);
+      await selectCell(page, "Delta");
+      await page.keyboard.press("Shift+Space");
+      await page.keyboard.press("Control+C");
+      await page.waitForFunction(() => window.__edit.lineCopy()?.kind === "row");
+      // Select the destination row from its middle cell: paste should anchor
+      // at the first column of the row, not clip from the focused cell.
+      await selectCell(page, "Theta");
+      await page.keyboard.press("Shift+Space");
+      await page.keyboard.press("Control+V");
+      await page.waitForFunction(() =>
+        document.querySelector('td[data-edit-id="e13"]')?.textContent.trim() === "Delta");
+      const rows = await page.locator('table[data-edit-id="e2"] tr').evaluateAll((trs) =>
+        trs.map((tr) => Array.from(tr.cells).map((td) => td.textContent.trim())));
+      expect(rows).toEqual([
+        ["Alpha", "Beta", "Gamma"],
+        ["Delta", "Epsilon", "Zeta"],
+        ["Delta", "Epsilon", "Zeta"],
+      ]);
+      expect(persistedFirstTableRows(editor.readFile())).toEqual(rows);
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("Ctrl+C then Ctrl+Shift+= duplicates a copied column structurally", async ({ page, context }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await context.grantPermissions(["clipboard-read", "clipboard-write"], {
+        origin: new URL(editor.url).origin,
+      });
+      await page.goto(editor.url);
+      await waitForEditor(page);
+      await selectCell(page, "Beta");
+      await page.keyboard.press("Control+Space");
+      const marker = await setReloadMarker(page);
+      await page.keyboard.press("Control+C");
+      await expect(page.locator("#__edit_cut")).toBeVisible();
+      await page.keyboard.press("Control+Shift+Equal");
+      await page.waitForFunction(() =>
+        document.querySelector('table[data-edit-id="e2"] tr')?.cells.length === 4);
+      await expectNoReload(page, marker);
+      const rows = await page.locator('table[data-edit-id="e2"] tr').evaluateAll((trs) =>
+        trs.map((tr) => Array.from(tr.cells).map((td) => td.textContent.trim())));
+      expect(rows).toEqual([
+        ["Alpha", "Beta", "Beta", "Gamma"],
+        ["Delta", "Epsilon", "Epsilon", "Zeta"],
+        ["Eta", "Theta", "Theta", "Iota"],
+      ]);
+      expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("column");
+      expect(persistedFirstTableRows(editor.readFile())).toEqual(rows);
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("Ctrl+C then Ctrl+Shift+= duplicates a copied row structurally", async ({ page, context }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await context.grantPermissions(["clipboard-read", "clipboard-write"], {
+        origin: new URL(editor.url).origin,
+      });
+      await page.goto(editor.url);
+      await waitForEditor(page);
+      await selectCell(page, "Delta");
+      await page.keyboard.press("Shift+Space");
+      await page.keyboard.press("Control+C");
+      await page.waitForFunction(() => window.__edit.lineCopy()?.kind === "row");
+      await page.keyboard.press("Control+Shift+Equal");
+      await page.waitForFunction(() =>
+        document.querySelectorAll('table[data-edit-id="e2"] tr').length === 4);
+      const rows = await page.locator('table[data-edit-id="e2"] tr').evaluateAll((trs) =>
+        trs.map((tr) => Array.from(tr.cells).map((td) => td.textContent.trim())));
+      expect(rows).toEqual([
+        ["Alpha", "Beta", "Gamma"],
+        ["Delta", "Epsilon", "Zeta"],
+        ["Delta", "Epsilon", "Zeta"],
+        ["Eta", "Theta", "Iota"],
+      ]);
+      expect(persistedFirstTableRows(editor.readFile())).toEqual(rows);
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("starting edit mode clears a staged row/column copy", async ({ page, context }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await context.grantPermissions(["clipboard-read", "clipboard-write"], {
+        origin: new URL(editor.url).origin,
+      });
+      await page.goto(editor.url);
+      await waitForEditor(page);
+      await selectCell(page, "Beta");
+      await page.keyboard.press("Control+Space");
+      await page.keyboard.press("Control+C");
+      await page.waitForFunction(() => window.__edit.lineCopy()?.kind === "column");
+      await page.keyboard.press("F2");
+      await page.waitForFunction(() => window.__edit.lineCopy() === null);
+      await expect(page.locator("#__edit_cut")).toBeHidden();
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
   test("structural table ops cancel a staged cut before replacing the table", async ({ page }) => {
     const editor = await startEditor("table-grid.html");
     try {
@@ -1277,6 +1421,30 @@ test.describe("keyboard navigation + adversarial flows", () => {
       await page.keyboard.press("Meta+x");
       // Toast surfaced and no cut was registered.
       await expect(page.locator("#__edit_status")).toContainText("Single-row");
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("Ctrl+C on a multi-row selection warns instead of silently copying one row", async ({ page, context }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await context.grantPermissions(["clipboard-read", "clipboard-write"], {
+        origin: new URL(editor.url).origin,
+      });
+      await page.goto(editor.url);
+      await waitForEditor(page);
+      await selectCell(page, "Beta");
+      await page.keyboard.press("Control+Space");
+      await page.keyboard.press("Control+C");
+      await page.waitForFunction(() => window.__edit.lineCopy()?.kind === "column");
+      await selectCell(page, "Alpha");
+      await page.keyboard.press("Shift+ArrowDown"); // two rows in range
+      await page.keyboard.press("Shift+Space");
+      expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("row");
+      await page.keyboard.press("Control+C");
+      await expect(page.locator("#__edit_status")).toContainText("Multi-row copy");
+      expect(await page.evaluate(() => window.__edit.lineCopy())).toBeNull();
     } finally {
       await editor.cleanup();
     }

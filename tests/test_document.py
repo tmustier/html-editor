@@ -324,6 +324,53 @@ class TableOperation(unittest.TestCase):
         self.assertNotIn("table_id", result)
         self.assertNotIn("table_patch", result)
 
+    def test_copy_row_before_duplicates_values_and_structure_with_fresh_ids(self):
+        s = soup(
+            '<table data-edit-id="t1"><tbody data-edit-id="tb1">'
+            '<tr data-edit-id="r1"><td data-edit-id="a1"><span class="badge" data-edit-id="a2">A</span></td><td data-edit-id="a3">B</td></tr>'
+            '<tr data-edit-id="r2"><td data-edit-id="b1">C</td><td data-edit-id="b2">D</td></tr>'
+            '</tbody></table>')
+        ok, result = D.table_operation(
+            s, "b1", "row-copy-before", source_cell_id="a1", include_table_patch=True)
+        self.assertTrue(ok)
+        rows = s.find_all("tr")
+        self.assertEqual([[td.get_text() for td in row.find_all("td")] for row in rows],
+                         [["A", "B"], ["A", "B"], ["C", "D"]])
+        self.assertEqual(rows[1].find("span")["class"], ["badge"])
+        self.assertNotEqual(rows[1].find("td")["data-edit-id"], "a1")
+        self.assertEqual(result["table_patch"]["kind"], "row-insert")
+        self.assertIn("row_html", result["table_patch"])
+
+    def test_copy_column_before_duplicates_values_and_structure_with_fresh_ids(self):
+        s = soup(
+            '<table data-edit-id="t1"><tbody data-edit-id="tb1">'
+            '<tr><td data-edit-id="a1">A</td><td data-edit-id="a2"><strong data-edit-id="a3">B</strong></td></tr>'
+            '<tr><td data-edit-id="b1">C</td><td data-edit-id="b2">D</td></tr>'
+            '</tbody></table>')
+        ok, result = D.table_operation(
+            s, "a1", "col-copy-before", source_cell_id="a2", include_table_patch=True)
+        self.assertTrue(ok)
+        rows = [[td.get_text() for td in tr.find_all("td")] for tr in s.find_all("tr")]
+        self.assertEqual(rows, [["B", "A", "B"], ["D", "C", "D"]])
+        self.assertEqual(s.find("strong").get_text(), "B")
+        self.assertNotEqual(s.find_all("td")[0]["data-edit-id"], "a2")
+        self.assertEqual(result["table_patch"]["kind"], "col-insert")
+        self.assertEqual(len(result["table_patch"]["cells_html"]), 2)
+
+    def test_copy_line_requires_source_cell_id(self):
+        s = soup('<table><tr><td data-edit-id="e1">A</td></tr></table>')
+        ok, result = D.table_operation(s, "e1", "row-copy-before")
+        self.assertFalse(ok)
+        self.assertIn("source_cell_id", result["error"])
+
+    def test_copy_line_rejects_cross_table_insert(self):
+        s = soup(
+            '<table><tr><td data-edit-id="a1">A</td></tr></table>'
+            '<table><tr><td data-edit-id="b1">B</td></tr></table>')
+        ok, result = D.table_operation(s, "b1", "row-copy-before", source_cell_id="a1")
+        self.assertFalse(ok)
+        self.assertIn("across tables", result["error"])
+
     def test_move_row_up_reorders_within_row_group(self):
         s = soup(
             '<table><tbody>'

@@ -8,6 +8,8 @@ import { sendComment, startComment } from "./comments.js";
 import { beginDrag, beginResize, cancelDrag } from "./drag.js";
 import {
   clearCut,
+  clearLineCopy,
+  commitLineCopyInsertBeforeSelection,
   commitLineCutInsertBeforeSelection,
   stageLineCut,
 } from "./cut.js";
@@ -18,6 +20,7 @@ import {
   isNativeClipboardTarget,
   pasteFromClipboard,
   pasteIntoSelection,
+  pastePayloadAtSelection,
   pasteStagedCut,
   stageRangeCutFromSelection,
   writeClipboardPayload,
@@ -95,6 +98,7 @@ export function deselect() {
   state.tableSelectionMode = null;
   state.tableRange = null;
   clearCut();
+  clearLineCopy();
   dom.selectBox.style.display = "none";
   dom.rowHandle.style.display = "none";
   dom.colHandle.style.display = "none";
@@ -189,6 +193,7 @@ async function appendTableLine(axis) {
   }
   const action = axis === "row" ? "row-insert-after" : "col-insert-after";
   if (state.cut) clearCut();
+  if (state.lineCopy) clearLineCopy();
   await runTableOperation(cell, action, {
     restoreMode: axis,
     successMessage: axis === "row" ? "Row added." : "Column added.",
@@ -245,6 +250,7 @@ async function performTableOperation(action) {
     return;
   }
   if (state.cut) clearCut();
+  if (state.lineCopy) clearLineCopy();
   await runTableOperation(cell, action, {
     restoreMode: tableRestoreModeForAction(action, state.tableSelectionMode || ""),
     successMessage: `Table ${action.replace(/-/g, " ")} done.`,
@@ -298,6 +304,13 @@ function collapseRangeToAnchor() {
   return true;
 }
 
+function startEditClearingTransfers(...args) {
+  // Editing cancels staged copy/cut state without mutating the source.
+  if (state.cut) clearCut();
+  if (state.lineCopy) clearLineCopy();
+  startEdit(...args);
+}
+
 export function initEvents() {
   // --- clipboard ----------------------------------------------------------
   document.addEventListener("copy", (e) => {
@@ -313,40 +326,20 @@ export function initEvents() {
       void pasteStagedCut();
       return;
     }
-    if (state.tableSelectionMode === "range") {
-      // Range mode owns Cmd+V: route through the Excel-style range-paste
-      // path anchored on the range's top-left cell.
-      const anchor = rangeAnchorElement();
-      if (!anchor) return;
-      const text = e.clipboardData && e.clipboardData.getData("text/plain");
-      const html = e.clipboardData && e.clipboardData.getData("text/html");
-      if (typeof text !== "string" && typeof html !== "string") return;
-      e.preventDefault();
-      // Drop the range so the paste lands on the anchor cell (range-paste
-      // logic already clips to the table). The visual will be reanchored
-      // by reloadAfterMutation if the paste fans out.
-      const stash = state.tableRange;
-      state.tableRange = null;
-      state.tableSelectionMode = null;
-      selectElementInternal(anchor);
-      void pasteIntoSelection({ text: text || "", html: html || "" }).catch(() => {
-        // If something went wrong, restore the prior range so the user can retry.
-        state.tableRange = stash;
-        state.tableSelectionMode = stash ? "range" : null;
-      });
-      return;
-    }
-    if (state.tableSelectionMode) {
-      // Row/column selection owns Cmd+V (cut-paste move). Never let the
-      // generic value-paste path race with it.
-      e.preventDefault();
-      return;
-    }
     const text = e.clipboardData && e.clipboardData.getData("text/plain");
     const html = e.clipboardData && e.clipboardData.getData("text/html");
     if (typeof text !== "string" && typeof html !== "string") return;
     e.preventDefault();
-    void pasteIntoSelection({ text: text || "", html: html || "" });
+    const payload = state.lineCopy?.payload && gridCellFrom(state.selected)
+      ? state.lineCopy.payload
+      : { text: text || "", html: html || "" };
+    if (state.tableSelectionMode === "range"
+        || state.tableSelectionMode === "row"
+        || state.tableSelectionMode === "column") {
+      void pastePayloadAtSelection(payload);
+      return;
+    }
+    void pasteIntoSelection(payload);
   }, true);
 
   // --- mouse tracking -----------------------------------------------------
@@ -413,18 +406,18 @@ export function initEvents() {
     if (target && target.kind === "svg-item") {
       if (state.selected !== el) selectElement(el);
       if (target.canEditText && isSvgLabelHit(e.target)) {
-        startEdit(e.target, e.clientX, e.clientY);
+        startEditClearingTransfers(e.target, e.clientX, e.clientY);
       }
       return;
     }
     if (target && target.kind === "svg-text") {
       selectElement(el);
-      startEdit(e.target, e.clientX, e.clientY);
+      startEditClearingTransfers(e.target, e.clientX, e.clientY);
       return;
     }
     if (target && target.canEditText && target.kind === "html-text") {
       selectElement(el);
-      startEdit(e.target, e.clientX, e.clientY);
+      startEditClearingTransfers(e.target, e.clientX, e.clientY);
       return;
     }
     selectElement(el);
@@ -441,7 +434,7 @@ export function initEvents() {
     const sel = window.getSelection();
     if (sel && sel.removeAllRanges) sel.removeAllRanges();
     selectElement(el);
-    startEdit(e.target, e.clientX, e.clientY);
+    startEditClearingTransfers(e.target, e.clientX, e.clientY);
   }, true);
 
   // --- keyboard shortcuts -------------------------------------------------
@@ -459,6 +452,7 @@ export function initEvents() {
       if (state.svgEditing){ e.preventDefault(); finishSvgLabelEdit(false); return; }
       if (state.editing)   return; // edit handler owns its own cancel
       if (state.cut) { e.preventDefault(); clearCut(); flash("Cut cleared.", { kind: "info", timeout: 800 }); return; }
+      if (state.lineCopy) { e.preventDefault(); clearLineCopy(); flash("Copy cleared.", { kind: "info", timeout: 800 }); return; }
       if (!dom.commentBox.hidden) { e.preventDefault(); dom.commentBox.hidden = true; return; }
       if (!dom.tableMenu.hidden)  { e.preventDefault(); dom.tableMenu.hidden = true; return; }
       if (!dom.helpOverlay.hidden){ e.preventDefault(); toggleHelp(false); return; }
@@ -595,6 +589,7 @@ export function initEvents() {
     if (isHistoryKey && !inEditableField && !state.editing) {
       e.preventDefault();
       if (state.cut) clearCut();
+      if (state.lineCopy) clearLineCopy();
       performHistory(key === "y" || e.shiftKey ? "redo" : "undo");
       return;
     }
@@ -613,6 +608,13 @@ export function initEvents() {
         e.preventDefault();
         e.stopPropagation();
         void commitLineCutInsertBeforeSelection();
+        return;
+      }
+      if (isPlusInsert && state.lineCopy && ["row", "column"].includes(state.lineCopy.kind)
+          && state.selected && gridCellFrom(state.selected)) {
+        e.preventDefault();
+        e.stopPropagation();
+        void commitLineCopyInsertBeforeSelection();
         return;
       }
       if (isPlusInsert && state.cut && state.cut.kind === "range") {
@@ -717,11 +719,9 @@ export function initEvents() {
     const unmodified = !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey;
     if (e.key === "F2" || (unmodified && (e.key === "Enter" || key === "e"))) {
       e.preventDefault();
-      // Editing cancels a staged cut without mutating the source.
-      if (state.cut) clearCut();
       // In range mode, collapse to anchor cell before entering edit.
       if (state.tableSelectionMode === "range") collapseRangeToAnchor();
-      startEdit();
+      startEditClearingTransfers();
       return;
     }
     if (unmodified && key === "c") {
@@ -816,7 +816,7 @@ export function initEvents() {
     const btn = e.target.closest && e.target.closest("[data-act]");
     const act = btn && btn.dataset.act;
     if (!act || btn.disabled) return;
-    if      (act === "edit")       startEdit();
+    if      (act === "edit")       startEditClearingTransfers();
     else if (act === "comment")    startComment();
     else if (act === "undo")       performHistory("undo");
     else if (act === "redo")       performHistory("redo");

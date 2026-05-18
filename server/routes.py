@@ -287,6 +287,7 @@ def make_handler(
             cell_id = (payload or {}).get("cell_id")
             action = (payload or {}).get("action")
             target_index_raw = (payload or {}).get("target_index")
+            source_cell_id = (payload or {}).get("source_cell_id")
             mode = (payload or {}).get("mode") or "before"
             include_table_html = (payload or {}).get("include_table_html") is True
             include_table_patch = (payload or {}).get("include_table_patch") is True
@@ -303,7 +304,9 @@ def make_handler(
             ok, result = self._mutate_document(
                 lambda soup: document.table_operation(
                     soup, str(cell_id), str(action),
-                    target_index=target_index, mode=str(mode),
+                    target_index=target_index,
+                    source_cell_id=str(source_cell_id) if source_cell_id else None,
+                    mode=str(mode),
                     include_table_html=include_table_html,
                     include_table_patch=include_table_patch))
             if not ok:

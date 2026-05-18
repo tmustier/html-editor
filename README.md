@@ -40,8 +40,8 @@ Comments are stored next to the HTML file in `<file>.comments.json`.
 - **Table structure edits** — select a table cell, press `Shift+Space` for its row or `Ctrl+Space` for its column (`Option+Space` also works if macOS owns `Ctrl+Space`), or click the left/top handles; then use the Table toolbar button to insert/delete/reorder rows and columns. `Shift+Arrow` extends a rectangular cell range; promote that range with `Shift+Space` / `Ctrl+Space` to cover every row/column it spans; press both (in any order) to select the whole table.
 - **Drag row/column handles** — grab the left or top selection handle and drag along the table to reorder; a purple drop line shows where the line will land.
 - **“+” edge zones** — hover any cell of a table and a thin “+” strip appears along the table’s bottom and right edges; click it to append a new row or column at the end.
-- **Excel cut + paste** — select a row/column/range and press `Cmd+X`; a transparent marching border stays on the source until you paste. `Cmd+V` moves the staged cut; for rows/columns, `Cmd+Shift+=` inserts the staged line before the current position.
-- **Insert / delete shortcuts** — with a row or column selected, `Ctrl+Shift+=` inserts a new row/column before it and `Ctrl+-` deletes it. `Cmd+Shift+=` / `Cmd+-` also work as Excel-for-Mac fallbacks.
+- **Excel copy/cut + paste** — select a row/column/range and press `Cmd+C` to copy or `Cmd+X` to stage a cut. Row/column copies paste all cells, and `Cmd+Shift+=` inserts copied/cut rows or columns before the current position.
+- **Insert / delete shortcuts** — with a row or column selected, `Ctrl+Shift+=` inserts a new row/column before it (or the copied/cut row/column if one is staged) and `Ctrl+-` deletes it. `Cmd+Shift+=` / `Cmd+-` also work as Excel-for-Mac fallbacks.
 
   First pass supports simple rectangular tables (no `rowspan`/`colspan`).
 - **Navigate by structure or by grid** — see shortcuts below.
@@ -55,22 +55,22 @@ Comments are stored next to the HTML file in `<file>.comments.json`.
 | `Cmd+Enter` | Save edit / send comment |
 | `Esc` | Cancel / dismiss / deselect |
 | `C` | Add a comment on the selected element |
-| `Cmd+C` / `Cmd+V` | Copy / paste the selected text box or table cell; spreadsheet ranges fill existing table cells and clip at table bounds |
+| `Cmd+C` / `Cmd+V` | Copy / paste the selected text box, table cell, range, row, or column; spreadsheet-shaped payloads fill existing table cells and clip at table bounds |
 | Duplicate toolbar button | Clone the selected element with fresh edit IDs |
 | `Cmd+Z` / `Cmd+Y` (`Cmd+Shift+Z`) | Undo / redo last saved edit or move |
 | Arrow keys | Move between table/grid cells when a cell is selected |
 | `Cmd+Arrow keys` | Jump to the edge of the current table row/column |
 | `Shift+Space` / `Ctrl+Space` | Select the current table row / column (`Option+Space` also selects column). Works inside edit mode — commits the cell, then promotes. |
 | `Shift`+arrows | Extend an Excel-style cell range from the anchor cell |
-| `Cmd+C` / `Cmd+V` on a range | Copy / paste the range as TSV + HTML (clipped at the destination table) |
+| `Cmd+C` / `Cmd+V` on a range/row/column | Copy / paste the selection as TSV + HTML (clipped at the destination table) |
 | `Cmd+X` on a row, column, or range | Stage an Excel-style cut; the source stays outlined until paste/insert commits it |
-| `Cmd+Shift+=` after row/column cut | Insert the staged row/column before the current table position |
+| `Cmd+Shift+=` after row/column copy or cut | Insert the copied/cut row/column before the current table position |
 | `Delete` / `Backspace` on a range | Clear every cell in the range (one undo) |
 | Row + `Ctrl+Space` or Column + `Shift+Space` | Escalate to whole-table selection (Esc steps back down) |
 | Row/column handles | Click the left/top table handles to select a row or column; drag to reorder |
 | `+` edge zones | Hover the table's right or bottom edge to append a column or row |
 | `Cmd+X` then `Cmd+V` | Move the staged row/column/range cut to the current destination (same table for row/column) |
-| `Ctrl+Shift+=` | Insert a row/column before the selected row/column |
+| `Ctrl+Shift+=` | Insert a row/column before the selected row/column; after row/column copy, duplicate the copied line |
 | `Ctrl+-` | Delete the selected row/column (`Cmd+Shift+=` and `Cmd+-` also work) |
 | Table toolbar button | Insert, delete, or reorder rows/columns for simple rectangular tables |
 | `Tab` / `Shift+Tab` | Next / previous table cell (saves the current cell first while editing) |
