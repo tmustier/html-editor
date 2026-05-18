@@ -18,6 +18,8 @@ All notable changes to `html-editor` are documented here. The format follows
   values to the destination and clears the source in one undoable batch.
 - **Server benchmark script.** `scripts/bench_server_table_ops.py` measures
   parse/save/table-operation/batch-save hot paths.
+- Documented a local-development skill symlink so `html-editor` is discoverable
+  to Pi without installing the full package.
 
 ### Changed
 

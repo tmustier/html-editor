@@ -96,6 +96,12 @@ pi install /path/to/html-editor
 # project-scoped variant: pi install -l /path/to/html-editor
 ```
 
+For local development, if you only want the skill to be discoverable without installing the whole package, symlink it into Pi's global skills directory:
+
+```bash
+ln -s /path/to/html-editor/skills/html-editor ~/.pi/agent/skills/html-editor
+```
+
 After install, launch the editor from inside the Pi session so the server inherits the bridge env var:
 
 ```bash
