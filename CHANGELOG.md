@@ -6,6 +6,10 @@ All notable changes to `html-editor` are documented here. The format follows
 
 ## Unreleased
 
+_No unreleased changes yet._
+
+## 0.1.8 — 2026-05-18
+
 ### Added
 
 - **Unified staged cuts.** `Cmd+X` on a row, column, or cell range now stages
