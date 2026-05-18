@@ -35,6 +35,9 @@ All notable changes to `html-editor` are documented here. The format follows
 - Row/column insert, delete, append, move, and staged row/column paste now
   update the live DOM after a successful save instead of forcing a full page
   reload; a safe reload fallback remains if local DOM application fails.
+- Clipboard/range-cell actions now live in `client/clipboard.js`, reducing the
+  event router to keyboard/mouse dispatch instead of copy/paste implementation
+  details.
 
 ## 0.1.7 — 2026-05-18
 
