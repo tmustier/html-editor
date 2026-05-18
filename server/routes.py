@@ -183,6 +183,19 @@ def make_handler(
             sys.stderr.flush()
             self._send_json(200, {"ok": True})
 
+        def _save_text_many(self, payload):
+            updates = (payload or {}).get("updates")
+            soup = document.load_soup(html_path)
+            ok, result = document.update_text_many(soup, updates)
+            if not ok:
+                self._send_result(ok, result)
+                return
+            history.remember()
+            document.save_soup(html_path, soup)
+            sys.stderr.write(f"[edit-many] saved {result['count']} text cells\n")
+            sys.stderr.flush()
+            self._send_json(200, result)
+
         def _save_svg_labels(self, payload):
             edit_id = (payload or {}).get("id")
             lines = (payload or {}).get("lines")
@@ -306,6 +319,7 @@ def make_handler(
     # POST route table — the canonical list of editor capabilities.
     _ROUTES: dict[str, Callable] = {
         "/save-text":        Handler._save_text,
+        "/save-text-many":   Handler._save_text_many,
         "/save-svg-labels":  Handler._save_svg_labels,
         "/move-element":     Handler._move_element,
         "/move-svg":         Handler._move_svg,

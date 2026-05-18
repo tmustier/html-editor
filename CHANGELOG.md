@@ -4,6 +4,12 @@ All notable changes to `html-editor` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project follows
 [Semantic Versioning](https://semver.org/).
 
+## 0.1.2 — 2026-05-18
+
+### Added
+
+- Excel/Sheets-style table range paste. Pasting tab/newline-delimited clipboard data into a selected table cell now fills existing table cells from that point, clipping at the current table bounds rather than creating new rows or columns.
+
 ## 0.1.1 — 2026-05-17
 
 ### Added

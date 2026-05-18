@@ -242,6 +242,28 @@ class UpdateText(unittest.TestCase):
         self.assertEqual(result["status"], 404)
 
 
+# --- update_text_many -------------------------------------------------------
+
+class UpdateTextMany(unittest.TestCase):
+    def test_updates_multiple_cells(self):
+        s = soup(
+            '<table><tr>'
+            '<td data-edit-id="e1">A</td><td data-edit-id="e2">B</td>'
+            '</tr></table>')
+        ok, result = D.update_text_many(s, [
+            {"id": "e1", "text": "One"},
+            {"id": "e2", "text": "Two"},
+        ])
+        self.assertTrue(ok)
+        self.assertEqual(result["count"], 2)
+        self.assertEqual([td.get_text() for td in s.find_all("td")], ["One", "Two"])
+
+    def test_rejects_empty_batch(self):
+        ok, result = D.update_text_many(soup("<p>x</p>"), [])
+        self.assertFalse(ok)
+        self.assertEqual(result["status"], 400)
+
+
 # --- update_svg_labels ------------------------------------------------------
 
 class UpdateSvgLabels(unittest.TestCase):

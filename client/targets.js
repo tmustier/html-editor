@@ -291,6 +291,28 @@ export function gridTabNeighbor(el, forward = true) {
   return selectableInCell(ordered[index + (forward ? 1 : -1)]);
 }
 
+export function gridPasteTargets(el, values) {
+  const cell = gridCellFrom(el);
+  const grid = cell && gridForCell(cell);
+  if (!grid || !Array.isArray(values)) return [];
+  const { matrix, position } = grid;
+  const targets = [];
+  const seen = new Set();
+  values.forEach((row, rowOffset) => {
+    if (!Array.isArray(row)) return;
+    row.forEach((text, colOffset) => {
+      const targetCell = matrix[position.row + rowOffset]
+        && matrix[position.row + rowOffset][position.col + colOffset];
+      if (!targetCell || seen.has(targetCell)) return;
+      const target = selectableInCell(targetCell);
+      if (!target || !isTextEditableElement(target)) return;
+      seen.add(targetCell);
+      targets.push({ el: target, text: String(text ?? "") });
+    });
+  });
+  return targets;
+}
+
 export function gridEdgeNeighbor(el, direction) {
   const cell = gridCellFrom(el);
   const grid = cell && gridForCell(cell);

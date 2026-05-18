@@ -41,6 +41,8 @@ async function getJson(path) {
 export const api = {
   saveText: (id, text, html) =>
     postJson(ENDPOINTS.saveText, { id, text, html }),
+  saveTextMany: (updates) =>
+    postJson(ENDPOINTS.saveTextMany, { updates }),
   saveSvgLabels: (id, lines) =>
     postJson(ENDPOINTS.saveSvgLabels, { id, lines }),
   moveElement: (id, target_id, position) =>

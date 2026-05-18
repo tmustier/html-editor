@@ -35,6 +35,7 @@ Comments are stored next to the HTML file in `<file>.comments.json`.
 - **Resize** — drag handles on the selection box for HTML elements with sensible width/height.
 - **Comment** — leave comments anchored to specific elements; they show up in a sidebar and survive reloads.
 - **Undo / redo** — every save and move is snapshotted on disk.
+- **Spreadsheet paste** — paste an Excel/Sheets-style range into a table cell to fill the existing table rectangle from that cell; overflow is clipped rather than adding rows/columns.
 - **Navigate by structure or by grid** — see shortcuts below.
 
 ## Keyboard shortcuts
@@ -46,7 +47,7 @@ Comments are stored next to the HTML file in `<file>.comments.json`.
 | `Cmd+Enter` | Save edit / send comment |
 | `Esc` | Cancel / dismiss / deselect |
 | `C` | Add a comment on the selected element |
-| `Cmd+C` / `Cmd+V` | Copy / paste the selected text box or table cell (preserves badge wrappers) |
+| `Cmd+C` / `Cmd+V` | Copy / paste the selected text box or table cell; spreadsheet ranges fill existing table cells and clip at table bounds |
 | `Cmd+Z` / `Cmd+Y` (`Cmd+Shift+Z`) | Undo / redo last saved edit or move |
 | Arrow keys | Move between table/grid cells when a cell is selected |
 | `Cmd+Arrow keys` | Jump to the edge of the current table row/column |

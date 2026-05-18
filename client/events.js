@@ -11,6 +11,7 @@ import { state } from "./state.js";
 import {
   editableFrom,
   gridCellFrom,
+  gridPasteTargets,
   isSvgLabelHit,
   navigate,
   navigateGrid,
@@ -127,6 +128,70 @@ function htmlForPlainPastePreservingTarget(el, text) {
   return clone.innerHTML;
 }
 
+function parseClipboardTableText(text) {
+  const raw = String(text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  if (!raw.includes("\t") && !raw.includes("\n")) return null;
+
+  const rows = [];
+  let row = [];
+  let cell = "";
+  let inQuotes = false;
+  for (let i = 0; i < raw.length; i += 1) {
+    const ch = raw[i];
+    if (ch === '"') {
+      if (inQuotes && raw[i + 1] === '"') {
+        cell += '"';
+        i += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (ch === "\t" && !inQuotes) {
+      row.push(cell);
+      cell = "";
+    } else if (ch === "\n" && !inQuotes) {
+      row.push(cell);
+      rows.push(row);
+      row = [];
+      cell = "";
+    } else {
+      cell += ch;
+    }
+  }
+  row.push(cell);
+  rows.push(row);
+  if (raw.endsWith("\n") && rows.length && rows.at(-1).length === 1
+      && rows.at(-1)[0] === "") {
+    rows.pop();
+  }
+  const cellCount = rows.reduce((sum, r) => sum + r.length, 0);
+  return cellCount > 1 ? rows : null;
+}
+
+function parseClipboardTableHtml(html) {
+  if (!html || !html.trim()) return null;
+  const template = document.createElement("template");
+  template.innerHTML = html;
+  const table = template.content.querySelector("table");
+  if (!table) return null;
+  const rows = Array.from(table.rows || table.querySelectorAll("tr"))
+    .map((row) => Array.from(row.cells || row.querySelectorAll("th, td"))
+      .map((cell) => (cell.innerText || cell.textContent || "").replace(/\u00a0/g, " ")))
+    .filter((row) => row.length);
+  const cellCount = rows.reduce((sum, row) => sum + row.length, 0);
+  return cellCount > 1 ? rows : null;
+}
+
+function applyPlainTextToElement(el, text) {
+  const nextHtml = htmlForPlainPastePreservingTarget(el, text);
+  if (nextHtml) el.innerHTML = nextHtml;
+  else el.innerText = text;
+  return {
+    id: el.getAttribute("data-edit-id"),
+    text: el.innerText || String(text || ""),
+    html: nextHtml || undefined,
+  };
+}
+
 async function writeClipboardPayload(text, html) {
   if (navigator.clipboard && navigator.clipboard.write && window.ClipboardItem) {
     await navigator.clipboard.write([new ClipboardItem({
@@ -161,6 +226,30 @@ async function pasteIntoSelection({ text = "", html = "" } = {}) {
     return;
   }
   const el = target.el;
+  const tableValues = parseClipboardTableText(text) || parseClipboardTableHtml(html);
+  if (tableValues && gridCellFrom(el)) {
+    const pasteTargets = gridPasteTargets(el, tableValues);
+    if (!pasteTargets.length) {
+      flash("No table cells available to paste into.", { kind: "warning" });
+      return;
+    }
+    const updates = pasteTargets.map(({ el: cellEl, text: cellText }) =>
+      applyPlainTextToElement(cellEl, cellText));
+    placeBox(dom.selectBox, el);
+    placeToolbar(el);
+    try {
+      await api.saveTextMany(updates);
+      const requested = tableValues.reduce((sum, row) => sum + row.length, 0);
+      const clipped = updates.length < requested ? " (clipped to table)." : ".";
+      flash(`Pasted ${updates.length} table cell${updates.length === 1 ? "" : "s"}${clipped}`,
+        { kind: "success" });
+    } catch (err) {
+      flash("Table paste failed: " + err.message, { kind: "error" });
+      reloadAfterMutation({ delay: 800 });
+    }
+    return;
+  }
+
   const cleanHtml = sanitizedHtmlFragment(html);
   const nextHtml = cleanHtml || htmlForPlainPastePreservingTarget(el, text);
   if (nextHtml) el.innerHTML = nextHtml;

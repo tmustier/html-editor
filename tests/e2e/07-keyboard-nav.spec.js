@@ -179,6 +179,41 @@ test.describe("keyboard navigation + adversarial flows", () => {
     }
   });
 
+  test("Excel-style range paste fills table cells and clips at existing bounds", async ({ page, context }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await context.grantPermissions(["clipboard-read", "clipboard-write"], {
+        origin: new URL(editor.url).origin,
+      });
+      await page.goto(editor.url);
+      await waitForEditor(page);
+
+      await page.evaluate(() => navigator.clipboard.writeText(
+        "One\tTwo\tOverflow\nThree\tFour\tOverflow\nOverflow\tOverflow\tOverflow"));
+      await selectCell(page, "Epsilon");
+      await page.keyboard.press("Meta+V");
+
+      await page.waitForFunction(() =>
+        (window.__edit.target()?.el?.textContent || "").trim() === "One");
+      const cells = await page.locator('table[data-edit-id="e2"] td').evaluateAll((tds) =>
+        tds.map((td) => td.textContent.trim()));
+      expect(cells).toEqual([
+        "Alpha", "Beta", "Gamma",
+        "Delta", "One", "Two",
+        "Eta", "Three", "Four",
+      ]);
+      await expect(page.locator("#__edit_status")).toContainText("Pasted 4 table cells");
+      const persisted = editor.readFile();
+      expect(persisted).toContain('<td data-edit-id="e10">One</td>');
+      expect(persisted).toContain('<td data-edit-id="e11">Two</td>');
+      expect(persisted).toContain('<td data-edit-id="e14">Three</td>');
+      expect(persisted).toContain('<td data-edit-id="e15">Four</td>');
+      expect(persisted).not.toContain("Overflow</td>");
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
   test("Tab and Shift+Tab walk table cells, including from edit mode", async ({ page }) => {
     const editor = await startEditor("table-grid.html");
     try {

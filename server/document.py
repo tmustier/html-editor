@@ -264,6 +264,35 @@ def update_text(
     return True, {"ok": True, "tag": el.name}
 
 
+def update_text_many(
+    soup: BeautifulSoup,
+    updates: list[dict],
+) -> tuple[bool, dict]:
+    if not isinstance(updates, list) or not updates:
+        return False, {"status": 400, "error": "expected non-empty updates[]"}
+    applied = []
+    for index, update in enumerate(updates):
+        if not isinstance(update, dict):
+            return False, {"status": 400, "error":
+                f"update {index} must be an object"}
+        edit_id = update.get("id")
+        if not edit_id:
+            return False, {"status": 400, "error":
+                f"update {index} is missing id"}
+        html = update.get("html")
+        ok, result = update_text(
+            soup,
+            str(edit_id),
+            str(update.get("text", "")),
+            html if isinstance(html, str) else None,
+        )
+        if not ok:
+            prefix = f"update {index} ({edit_id}) failed: "
+            return False, {**result, "error": prefix + result.get("error", "unknown error")}
+        applied.append({"id": edit_id, "tag": result.get("tag")})
+    return True, {"ok": True, "count": len(applied), "updates": applied}
+
+
 def update_svg_labels(
     soup: BeautifulSoup,
     edit_id: str,

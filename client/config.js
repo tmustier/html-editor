@@ -20,6 +20,7 @@ export const ICONS = {
 
 export const ENDPOINTS = {
   saveText:      "/save-text",
+  saveTextMany:  "/save-text-many",
   saveSvgLabels: "/save-svg-labels",
   moveElement:   "/move-element",
   moveSvg:       "/move-svg",
