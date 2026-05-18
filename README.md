@@ -32,10 +32,12 @@ Comments are stored next to the HTML file in `<file>.comments.json`.
 - **Edit text in place** — paragraphs, headings, list items, table cells, mixed inline blocks (preserves `<b>`, `<code>`, `<a>`, etc.).
 - **Edit SVG labels** — click a labelled diagram group; preserves `<tspan>` formatting when possible.
 - **Move things** — drag the selection border to reorder HTML blocks; drag SVG groups to reposition them.
+- **Duplicate things** — clone a selected HTML block/table or leaf SVG item with fresh edit IDs.
 - **Resize** — drag handles on the selection box for HTML elements with sensible width/height.
 - **Comment** — leave comments anchored to specific elements; they show up in a sidebar and survive reloads.
 - **Undo / redo** — every save and move is snapshotted on disk.
 - **Spreadsheet paste** — paste an Excel/Sheets-style range into a table cell to fill the existing table rectangle from that cell; overflow is clipped rather than adding rows/columns.
+- **Table structure edits** — select a table cell, then use the Table toolbar button to insert/delete/reorder rows and columns. First pass supports simple rectangular tables (no `rowspan`/`colspan`).
 - **Navigate by structure or by grid** — see shortcuts below.
 
 ## Keyboard shortcuts
@@ -48,9 +50,11 @@ Comments are stored next to the HTML file in `<file>.comments.json`.
 | `Esc` | Cancel / dismiss / deselect |
 | `C` | Add a comment on the selected element |
 | `Cmd+C` / `Cmd+V` | Copy / paste the selected text box or table cell; spreadsheet ranges fill existing table cells and clip at table bounds |
+| Duplicate toolbar button | Clone the selected element with fresh edit IDs |
 | `Cmd+Z` / `Cmd+Y` (`Cmd+Shift+Z`) | Undo / redo last saved edit or move |
 | Arrow keys | Move between table/grid cells when a cell is selected |
 | `Cmd+Arrow keys` | Jump to the edge of the current table row/column |
+| Table toolbar button | Insert, delete, or reorder rows/columns for simple rectangular tables |
 | `Tab` / `Shift+Tab` | Next / previous table cell (saves the current cell first while editing) |
 | `Option+Left` / `Right` | Previous / next sibling |
 | `Option+Up` / `Down` | Parent / first editable child |

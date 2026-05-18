@@ -16,6 +16,7 @@ export const ICONS = {
   right: '<svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>',
   down: '<svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>',
   help: '<svg viewBox="0 0 24 24"><path d="M9.2 9a3 3 0 1 1 4.95 2.3c-1 .78-2.15 1.3-2.15 2.7"/><path d="M12 18h.01"/><circle cx="12" cy="12" r="9"/></svg>',
+  table: '<svg viewBox="0 0 24 24"><path d="M4 5h16v14H4z"/><path d="M4 10h16M4 15h16M10 5v14M15 5v14"/></svg>',
 };
 
 export const ENDPOINTS = {
@@ -25,6 +26,8 @@ export const ENDPOINTS = {
   moveElement:   "/move-element",
   moveSvg:       "/move-svg",
   resizeElement: "/resize-element",
+  tableOperation: "/table-operation",
+  duplicateElement: "/duplicate-element",
   undo:          "/undo",
   redo:          "/redo",
   comment:       "/comment",

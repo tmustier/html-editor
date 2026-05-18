@@ -34,6 +34,8 @@ export function initDom() {
       <button data-act="edit" aria-label="Edit text" title="Edit text (F2, Enter, or double-click)">${icon("edit")}</button>
       <button data-act="comment" aria-label="Comment" title="Comment (C)">${icon("comment")}</button>
       <button data-act="drag" class="drag-handle" aria-label="Drag component" title="Drag to move this component before/after another">${icon("drag")}</button>
+      <button data-act="duplicate" aria-label="Duplicate element" title="Duplicate this element">${icon("copy")}</button>
+      <button data-act="table" aria-label="Table actions" title="Table row/column actions">${icon("table")}</button>
       <span class="sep"></span>
       <button data-act="nav-prev" aria-label="Previous sibling" title="Previous sibling (Option+Left)">${icon("left")}</button>
       <button data-act="nav-parent" aria-label="Parent" title="Parent (Option+Up)">${icon("up")}</button>
@@ -44,6 +46,25 @@ export function initDom() {
       <button data-act="redo" aria-label="Redo" title="Redo last undone edit/move (Command+Y or Command+Shift+Z)">${icon("redo")}</button>
       <button data-act="help" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)">${icon("help")}</button>
       <button data-act="close" aria-label="Deselect" title="Deselect (Esc)">${icon("close")}</button>
+    </div>
+    <div id="__edit_tablemenu" hidden>
+      <div class="group">
+        <div class="label">Rows</div>
+        <button data-table-act="row-insert-before">Insert row above</button>
+        <button data-table-act="row-insert-after">Insert row below</button>
+        <button data-table-act="row-move-up">Move row up</button>
+        <button data-table-act="row-move-down">Move row down</button>
+        <button data-table-act="row-delete" class="danger">Delete row</button>
+      </div>
+      <div class="group">
+        <div class="label">Columns</div>
+        <button data-table-act="col-insert-before">Insert column left</button>
+        <button data-table-act="col-insert-after">Insert column right</button>
+        <button data-table-act="col-move-left">Move column left</button>
+        <button data-table-act="col-move-right">Move column right</button>
+        <button data-table-act="col-delete" class="danger">Delete column</button>
+      </div>
+      <div class="hint">Simple rectangular tables only for now — no rowspan/colspan.</div>
     </div>
     <div id="__edit_commentbox" hidden>
       <textarea placeholder="Comment for the agent...  (Cmd+Enter to send, Esc to cancel)"></textarea>
@@ -64,10 +85,12 @@ export function initDom() {
           <tr><td><kbd>C</kbd></td><td>Add a comment</td></tr>
           <tr><td><kbd>Cmd</kbd><kbd>C</kbd> / <kbd>Cmd</kbd><kbd>V</kbd></td><td>Copy / paste the selected text box or table cell; Excel-style ranges fill existing table cells and clip at the edge</td></tr>
           <tr><td><kbd>Drag border</kbd> / <kbd>Drag handle</kbd></td><td>Reorder HTML or reposition diagram item</td></tr>
+          <tr><td><kbd>Duplicate</kbd> button</td><td>Clone the selected element with fresh edit IDs</td></tr>
           <tr><td><kbd>Cmd</kbd><kbd>Z</kbd></td><td>Undo last saved edit or move</td></tr>
           <tr><td><kbd>Cmd</kbd><kbd>Y</kbd> / <kbd>Cmd</kbd><kbd>Shift</kbd><kbd>Z</kbd></td><td>Redo</td></tr>
           <tr><td><kbd>Arrow keys</kbd></td><td>Move between table/grid cells when a cell is selected</td></tr>
           <tr><td><kbd>Cmd</kbd><kbd>Arrow keys</kbd></td><td>Jump to the edge of the current table row/column</td></tr>
+          <tr><td><kbd>Table</kbd> button</td><td>Insert, delete, or reorder rows/columns for simple rectangular tables</td></tr>
           <tr><td><kbd>Tab</kbd> / <kbd>Shift</kbd><kbd>Tab</kbd></td><td>Next / previous table cell; saves the current cell first while editing</td></tr>
           <tr><td><kbd>Option</kbd><kbd>Left</kbd> / <kbd>Right</kbd></td><td>Previous / next sibling</td></tr>
           <tr><td><kbd>Option</kbd><kbd>Up</kbd></td><td>Parent</td></tr>
@@ -97,6 +120,7 @@ export function initDom() {
 
   const toolbar = root.querySelector("#__edit_toolbar");
   const commentBox = root.querySelector("#__edit_commentbox");
+  const tableMenu = root.querySelector("#__edit_tablemenu");
   const sidebar = root.querySelector("#__edit_sidebar");
   const svgEditor = root.querySelector("#__edit_svgeditor");
 
@@ -110,6 +134,8 @@ export function initDom() {
     editBtn:     toolbar.querySelector("[data-act=edit]"),
     commentBtn:  toolbar.querySelector("[data-act=comment]"),
     dragBtn:     toolbar.querySelector("[data-act=drag]"),
+    duplicateBtn: toolbar.querySelector("[data-act=duplicate]"),
+    tableBtn:    toolbar.querySelector("[data-act=table]"),
     undoBtn:     toolbar.querySelector("[data-act=undo]"),
     redoBtn:     toolbar.querySelector("[data-act=redo]"),
     closeBtn:    toolbar.querySelector("[data-act=close]"),
@@ -118,6 +144,7 @@ export function initDom() {
     navParent:   toolbar.querySelector("[data-act=nav-parent]"),
     navChild:    toolbar.querySelector("[data-act=nav-child]"),
     helpOverlay: root.querySelector("#__edit_help"),
+    tableMenu,
     commentBox,
     commentTA:   commentBox.querySelector("textarea"),
     svgEditor,

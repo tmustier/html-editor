@@ -282,6 +282,39 @@ def make_handler(
             sys.stderr.flush()
             self._send_json(200, result)
 
+        def _table_operation(self, payload):
+            cell_id = (payload or {}).get("cell_id")
+            action = (payload or {}).get("action")
+            if not cell_id or not action:
+                self._send_json(400, {"error": "expected cell_id and action"})
+                return
+            soup = document.load_soup(html_path)
+            ok, result = document.table_operation(soup, str(cell_id), str(action))
+            if not ok:
+                self._send_result(ok, result)
+                return
+            history.remember()
+            document.save_soup(html_path, soup)
+            sys.stderr.write(f"[table] {action} at {cell_id}\n")
+            sys.stderr.flush()
+            self._send_json(200, result)
+
+        def _duplicate_element(self, payload):
+            edit_id = (payload or {}).get("id")
+            if not edit_id:
+                self._send_json(400, {"error": "missing id"})
+                return
+            soup = document.load_soup(html_path)
+            ok, result = document.duplicate_element(soup, str(edit_id))
+            if not ok:
+                self._send_result(ok, result)
+                return
+            history.remember()
+            document.save_soup(html_path, soup)
+            sys.stderr.write(f"[duplicate] {edit_id} -> {result['new_id']}\n")
+            sys.stderr.flush()
+            self._send_json(200, result)
+
         def _undo(self, _payload):
             if not history.undo():
                 self._send_json(409, {"error": "nothing to undo"})
@@ -324,6 +357,8 @@ def make_handler(
         "/move-element":     Handler._move_element,
         "/move-svg":         Handler._move_svg,
         "/resize-element":   Handler._resize_element,
+        "/table-operation":  Handler._table_operation,
+        "/duplicate-element": Handler._duplicate_element,
         "/undo":             Handler._undo,
         "/redo":             Handler._redo,
         "/comment":          Handler._add_comment,

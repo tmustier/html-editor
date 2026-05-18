@@ -214,6 +214,158 @@ test.describe("keyboard navigation + adversarial flows", () => {
     }
   });
 
+  test("toolbar table menu inserts rows and restores selection after reload", async ({ page }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+
+      await selectCell(page, "Epsilon");
+      await page.locator('#__edit_toolbar [data-act="table"]').click();
+      await expect(page.locator("#__edit_tablemenu")).toBeVisible();
+      await page.locator('#__edit_tablemenu [data-table-act="row-insert-after"]').click();
+
+      await page.waitForFunction(() =>
+        window.__edit && document.querySelectorAll('table[data-edit-id="e2"] tr').length === 4);
+      const rows = await page.locator('table[data-edit-id="e2"] tr').evaluateAll((trs) =>
+        trs.map((tr) => Array.from(tr.cells).map((td) => td.textContent.trim())));
+      expect(rows).toEqual([
+        ["Alpha", "Beta", "Gamma"],
+        ["Delta", "Epsilon", "Zeta"],
+        ["", "", ""],
+        ["Eta", "Theta", "Iota"],
+      ]);
+      expect(await selectedText(page)).toBe("");
+      expect(editor.readFile()).toMatch(/<td data-edit-id="e\d+"><\/td>/);
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("toolbar table menu inserts columns at the selected cell", async ({ page }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+
+      await selectCell(page, "Epsilon");
+      await page.locator('#__edit_toolbar [data-act="table"]').click();
+      await page.locator('#__edit_tablemenu [data-table-act="col-insert-before"]').click();
+
+      await page.waitForFunction(() =>
+        window.__edit && document.querySelector('table[data-edit-id="e2"] tr')?.cells.length === 4);
+      const rows = await page.locator('table[data-edit-id="e2"] tr').evaluateAll((trs) =>
+        trs.map((tr) => Array.from(tr.cells).map((td) => td.textContent.trim())));
+      expect(rows).toEqual([
+        ["Alpha", "", "Beta", "Gamma"],
+        ["Delta", "", "Epsilon", "Zeta"],
+        ["Eta", "", "Theta", "Iota"],
+      ]);
+      expect(await selectedText(page)).toBe("");
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("toolbar table menu deletes rows and columns", async ({ page }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+
+      await selectCell(page, "Epsilon");
+      await page.locator('#__edit_toolbar [data-act="table"]').click();
+      await page.locator('#__edit_tablemenu [data-table-act="row-delete"]').click();
+      await page.waitForFunction(() =>
+        window.__edit && document.querySelectorAll('table[data-edit-id="e2"] tr').length === 2);
+      let rows = await page.locator('table[data-edit-id="e2"] tr').evaluateAll((trs) =>
+        trs.map((tr) => Array.from(tr.cells).map((td) => td.textContent.trim())));
+      expect(rows).toEqual([
+        ["Alpha", "Beta", "Gamma"],
+        ["Eta", "Theta", "Iota"],
+      ]);
+      expect(await selectedText(page)).toBe("Theta");
+
+      await page.locator('#__edit_toolbar [data-act="table"]').click();
+      await page.locator('#__edit_tablemenu [data-table-act="col-delete"]').click();
+      await page.waitForFunction(() =>
+        window.__edit && document.querySelector('table[data-edit-id="e2"] tr')?.cells.length === 2);
+      rows = await page.locator('table[data-edit-id="e2"] tr').evaluateAll((trs) =>
+        trs.map((tr) => Array.from(tr.cells).map((td) => td.textContent.trim())));
+      expect(rows).toEqual([
+        ["Alpha", "Gamma"],
+        ["Eta", "Iota"],
+      ]);
+      expect(await selectedText(page)).toBe("Iota");
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("toolbar table menu reorders rows and columns", async ({ page }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+
+      await selectCell(page, "Epsilon");
+      await page.locator('#__edit_toolbar [data-act="table"]').click();
+      await page.locator('#__edit_tablemenu [data-table-act="row-move-up"]').click();
+      await page.waitForFunction(() =>
+        window.__edit && document.querySelector('table[data-edit-id="e2"] td')?.textContent.trim() === "Delta");
+      let rows = await page.locator('table[data-edit-id="e2"] tr').evaluateAll((trs) =>
+        trs.map((tr) => Array.from(tr.cells).map((td) => td.textContent.trim())));
+      expect(rows).toEqual([
+        ["Delta", "Epsilon", "Zeta"],
+        ["Alpha", "Beta", "Gamma"],
+        ["Eta", "Theta", "Iota"],
+      ]);
+      expect(await selectedText(page)).toBe("Epsilon");
+
+      await page.locator('#__edit_toolbar [data-act="table"]').click();
+      await page.locator('#__edit_tablemenu [data-table-act="col-move-right"]').click();
+      await page.waitForFunction(() =>
+        window.__edit && Array.from(document.querySelector('table[data-edit-id="e2"] tr').cells)
+          .map((td) => td.textContent.trim()).join("|") === "Delta|Zeta|Epsilon");
+      rows = await page.locator('table[data-edit-id="e2"] tr').evaluateAll((trs) =>
+        trs.map((tr) => Array.from(tr.cells).map((td) => td.textContent.trim())));
+      expect(rows).toEqual([
+        ["Delta", "Zeta", "Epsilon"],
+        ["Alpha", "Gamma", "Beta"],
+        ["Eta", "Iota", "Theta"],
+      ]);
+      expect(await selectedText(page)).toBe("Epsilon");
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("toolbar duplicate clones an element with fresh edit ids", async ({ page }) => {
+    const editor = await startEditor("minimal.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+
+      await page.evaluate(() => {
+        window.__edit.select(document.querySelector('[data-edit-id="e1"]'));
+      });
+      await page.locator('#__edit_toolbar [data-act="duplicate"]').click();
+
+      await page.waitForFunction(() =>
+        window.__edit && document.querySelectorAll("p").length === 3);
+      const texts = await page.locator("body > p").evaluateAll((ps) =>
+        ps.map((p) => p.textContent.trim()));
+      expect(texts).toEqual(["hello world", "hello world", "second paragraph"]);
+      const ids = await page.locator("body > p").evaluateAll((ps) =>
+        ps.map((p) => p.getAttribute("data-edit-id")));
+      expect(new Set(ids).size).toBe(3);
+      expect(ids[1]).not.toBe("e1");
+      expect(await selectedText(page)).toBe("hello world");
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
   test("Tab and Shift+Tab walk table cells, including from edit mode", async ({ page }) => {
     const editor = await startEditor("table-grid.html");
     try {

@@ -399,6 +399,17 @@ export function breadcrumb(el) {
 
 // --- layout / placement ---------------------------------------------------
 
+function canDuplicateElement(el, target) {
+  if (!el || !target) return false;
+  if (target.kind === "svg-text") return true;
+  if (!target.canMove) return false;
+  if (!isInsideSvg(el)) {
+    const table = el.closest && el.closest("table");
+    if (table && el !== table) return false;
+  }
+  return true;
+}
+
 export function placeBox(box, el) {
   if (!el) { box.style.display = "none"; return; }
   const r = rectOf(el);
@@ -433,6 +444,19 @@ export function placeToolbar(el) {
           : "Edit text (F2, Enter, or double-click)"));
   dom.commentBtn.disabled = isEditing;
   dom.dragBtn.disabled = isEditing || !(target && target.canMove);
+  dom.duplicateBtn.disabled = isEditing || !canDuplicateElement(el, target);
+  dom.duplicateBtn.title = isEditing
+    ? "Finish editing before duplicating"
+    : (dom.duplicateBtn.disabled
+      ? "This element can't be duplicated directly"
+      : "Duplicate this element with fresh edit IDs");
+  dom.tableBtn.disabled = isEditing || !gridCellFrom(el);
+  dom.tableBtn.title = isEditing
+    ? "Finish editing before changing table structure"
+    : (dom.tableBtn.disabled
+      ? "Select a table cell for row/column actions"
+      : "Insert, delete, or reorder rows and columns");
+  if (dom.tableBtn.disabled) dom.tableMenu.hidden = true;
   dom.dragBtn.title = isEditing
     ? "Finish editing before moving this component"
     : (target && target.moveMode === "spatial"
@@ -482,6 +506,7 @@ export function selectElementInternal(el) {
   placeBox(dom.selectBox, el);
   placeToolbar(el);
   dom.commentBox.hidden = true;
+  dom.tableMenu.hidden = true;
   if (!state.svgEditing) dom.svgEditor.hidden = true;
 }
 

@@ -264,6 +264,100 @@ class UpdateTextMany(unittest.TestCase):
         self.assertEqual(result["status"], 400)
 
 
+# --- table_operation -------------------------------------------------------
+
+class TableOperation(unittest.TestCase):
+    def test_insert_row_after_clones_structure_blank_and_assigns_ids(self):
+        s = soup(
+            '<table data-edit-id="e1"><tbody data-edit-id="e2">'
+            '<tr data-edit-id="e3"><td data-edit-id="e4"><span class="badge" data-edit-id="e5">A</span></td>'
+            '<td data-edit-id="e6">B</td></tr>'
+            '</tbody></table>')
+        ok, result = D.table_operation(s, "e4", "row-insert-after")
+        self.assertTrue(ok)
+        rows = s.find_all("tr")
+        self.assertEqual(len(rows), 2)
+        self.assertEqual([cell.get_text() for cell in rows[1].find_all("td")], ["", ""])
+        self.assertEqual(rows[1].find("span")["class"], ["badge"])
+        self.assertTrue(rows[1].find("td").has_attr("data-edit-id"))
+        self.assertNotEqual(rows[1].find("td")["data-edit-id"], "e4")
+        self.assertEqual(result["action"], "row-insert-after")
+
+    def test_delete_column_removes_that_cell_from_each_row(self):
+        s = soup(
+            '<table><tr><td data-edit-id="e1">A</td><td data-edit-id="e2">B</td></tr>'
+            '<tr><td data-edit-id="e3">C</td><td data-edit-id="e4">D</td></tr></table>')
+        ok, result = D.table_operation(s, "e2", "col-delete")
+        self.assertTrue(ok)
+        self.assertEqual([[td.get_text() for td in tr.find_all("td")] for tr in s.find_all("tr")],
+                         [["A"], ["C"]])
+        self.assertEqual(result["selection_id"], "e1")
+
+    def test_move_row_up_reorders_within_row_group(self):
+        s = soup(
+            '<table><tbody>'
+            '<tr><td data-edit-id="e1">A</td></tr>'
+            '<tr><td data-edit-id="e2">B</td></tr>'
+            '</tbody></table>')
+        ok, _ = D.table_operation(s, "e2", "row-move-up")
+        self.assertTrue(ok)
+        self.assertEqual([td.get_text() for td in s.find_all("td")], ["B", "A"])
+
+    def test_rejects_rowspan_tables_for_now(self):
+        s = soup(
+            '<table><tr><td data-edit-id="e1" rowspan="2">A</td><td data-edit-id="e2">B</td></tr>'
+            '<tr><td data-edit-id="e3">C</td></tr></table>')
+        ok, result = D.table_operation(s, "e2", "col-insert-after")
+        self.assertFalse(ok)
+        self.assertEqual(result["status"], 400)
+        self.assertIn("rowspan", result["error"])
+
+    def test_rejects_column_edits_when_colgroup_present(self):
+        s = soup(
+            '<table><colgroup><col class="wide"/></colgroup>'
+            '<tr><td data-edit-id="e1">A</td></tr></table>')
+        ok, result = D.table_operation(s, "e1", "col-insert-after")
+        self.assertFalse(ok)
+        self.assertEqual(result["status"], 400)
+        self.assertIn("colgroup", result["error"])
+
+
+# --- duplicate_element -----------------------------------------------------
+
+class DuplicateElement(unittest.TestCase):
+    def test_duplicates_html_element_with_fresh_ids(self):
+        s = soup(
+            '<section id="original" data-edit-id="e1"><p id="child" data-edit-id="e2">Hello</p></section>'
+            '<p data-edit-id="e3">After</p>')
+        ok, result = D.duplicate_element(s, "e1")
+        self.assertTrue(ok)
+        sections = s.find_all("section")
+        self.assertEqual(len(sections), 2)
+        self.assertEqual(sections[1].get_text(), "Hello")
+        self.assertNotEqual(sections[1]["data-edit-id"], "e1")
+        self.assertFalse(sections[1].has_attr("id"))
+        self.assertNotEqual(sections[1].find("p")["data-edit-id"], "e2")
+        self.assertFalse(sections[1].find("p").has_attr("id"))
+        self.assertEqual(result["new_id"], sections[1]["data-edit-id"])
+
+    def test_rejects_table_internal_duplicates(self):
+        s = soup('<table><tr><td data-edit-id="e1">A</td></tr></table>')
+        ok, result = D.duplicate_element(s, "e1")
+        self.assertFalse(ok)
+        self.assertEqual(result["status"], 400)
+        self.assertIn("table internals", result["error"])
+
+    def test_duplicates_orphan_svg_text_with_offset(self):
+        s = soup('<svg><text data-edit-id="e1">Label</text></svg>')
+        ok, result = D.duplicate_element(s, "e1")
+        self.assertTrue(ok)
+        texts = s.find_all("text")
+        self.assertEqual(len(texts), 2)
+        self.assertEqual(texts[1].get_text(), "Label")
+        self.assertIn("translate(12.00 12.00)", texts[1]["transform"])
+        self.assertNotEqual(result["new_id"], "e1")
+
+
 # --- update_svg_labels ------------------------------------------------------
 
 class UpdateSvgLabels(unittest.TestCase):

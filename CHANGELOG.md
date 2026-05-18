@@ -4,6 +4,17 @@ All notable changes to `html-editor` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project follows
 [Semantic Versioning](https://semver.org/).
 
+## 0.1.3 — 2026-05-18
+
+### Added
+
+- Table row/column structure actions from the toolbar: insert, delete, and reorder rows/columns in simple rectangular tables.
+- Duplicate selected elements with fresh edit IDs. Supports regular HTML blocks/tables and leaf SVG items; table internals stay guarded behind the table actions.
+
+### Changed
+
+- Structural mutations restore selection after the required page reload.
+
 ## 0.1.2 — 2026-05-18
 
 ### Added

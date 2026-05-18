@@ -51,6 +51,10 @@ export const api = {
     postJson(ENDPOINTS.moveSvg, { id, translate_x, translate_y }),
   resizeElement: (id, body) =>
     postJson(ENDPOINTS.resizeElement, { id, ...body }),
+  tableOperation: (cell_id, action) =>
+    postJson(ENDPOINTS.tableOperation, { cell_id, action }),
+  duplicateElement: (id) =>
+    postJson(ENDPOINTS.duplicateElement, { id }),
   undo: () => postJson(ENDPOINTS.undo, {}),
   redo: () => postJson(ENDPOINTS.redo, {}),
   comment: (id, comment, excerpt, tag) =>

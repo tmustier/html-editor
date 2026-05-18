@@ -7,6 +7,7 @@ import { performHistory, selectElement, deselect } from "./events.js";
 import { state } from "./state.js";
 import {
   currentTarget,
+  ensureVisible,
   navigate,
   navigateGrid,
   placeBox,
@@ -45,6 +46,17 @@ export function initRuntime() {
   // Poll for comments so external CLI edits show up.
   setInterval(loadComments, COMMENT_POLL_MS);
   loadComments();
+
+  const restoreId = sessionStorage.getItem("__edit_restore_selection");
+  if (restoreId) {
+    sessionStorage.removeItem("__edit_restore_selection");
+    const restoreEl = Array.from(document.querySelectorAll("[data-edit-id]")).find((el) =>
+      el.getAttribute("data-edit-id") === restoreId);
+    if (restoreEl) {
+      selectElement(restoreEl);
+      ensureVisible(restoreEl);
+    }
+  }
 
   // tiny API for debugging / tests
   window.__edit = {

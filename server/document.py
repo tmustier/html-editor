@@ -8,6 +8,7 @@ means adding one function here and one route in routes.py.
 
 from __future__ import annotations
 
+import copy
 import re
 from pathlib import Path
 from typing import Optional
@@ -65,10 +66,13 @@ def find_by_edit_id(soup: BeautifulSoup, edit_id: str) -> Optional[Tag]:
 
 # --- ensure-edit-ids --------------------------------------------------------
 
-def ensure_edit_ids(html_path: Path) -> BeautifulSoup:
-    """Make sure every editable element has a data-edit-id. Persists changes to
-    disk and returns the (possibly mutated) soup."""
-    soup = load_soup(html_path)
+def assign_missing_edit_ids(soup: BeautifulSoup) -> bool:
+    """Assign data-edit-id attributes to any newly-created editable elements.
+
+    Returns True when the soup changed. This is the in-memory twin of
+    ensure_edit_ids(), used by structural mutations that clone/insert nodes
+    before the next page load.
+    """
     existing = []
     for el in soup.find_all(attrs={"data-edit-id": True}):
         m = re.match(r"e(\d+)$", el.get("data-edit-id", ""))
@@ -101,7 +105,14 @@ def ensure_edit_ids(html_path: Path) -> BeautifulSoup:
             next_id += 1
             changed = True
 
-    if changed:
+    return changed
+
+
+def ensure_edit_ids(html_path: Path) -> BeautifulSoup:
+    """Make sure every editable element has a data-edit-id. Persists changes to
+    disk and returns the (possibly mutated) soup."""
+    soup = load_soup(html_path)
+    if assign_missing_edit_ids(soup):
         save_soup(html_path, soup)
     return soup
 
@@ -291,6 +302,272 @@ def update_text_many(
             return False, {**result, "error": prefix + result.get("error", "unknown error")}
         applied.append({"id": edit_id, "tag": result.get("tag")})
     return True, {"ok": True, "count": len(applied), "updates": applied}
+
+
+# --- table structure operations -------------------------------------------
+
+TABLE_ACTIONS = {
+    "row-insert-before", "row-insert-after", "row-delete",
+    "row-move-up", "row-move-down",
+    "col-insert-before", "col-insert-after", "col-delete",
+    "col-move-left", "col-move-right",
+}
+
+ROW_GROUP_TAGS = {"thead", "tbody", "tfoot"}
+
+
+def _direct_table_rows(table: Tag) -> list[Tag]:
+    rows: list[Tag] = []
+    for child in table.children:
+        if not isinstance(child, Tag):
+            continue
+        if child.name == "tr":
+            rows.append(child)
+        elif child.name in ROW_GROUP_TAGS:
+            rows.extend(
+                row for row in child.children
+                if isinstance(row, Tag) and row.name == "tr"
+            )
+    return rows
+
+
+def _row_cells(row: Tag) -> list[Tag]:
+    return [
+        child for child in row.children
+        if isinstance(child, Tag) and child.name in {"td", "th"}
+    ]
+
+
+def _positive_span(cell: Tag, attr: str) -> int:
+    try:
+        value = int(cell.get(attr, "1") or "1")
+    except (TypeError, ValueError):
+        value = 1
+    return value if value > 0 else 1
+
+
+def _cell_for_edit_id(soup: BeautifulSoup, edit_id: str) -> Optional[Tag]:
+    el = find_by_edit_id(soup, edit_id)
+    if el is None:
+        return None
+    if el.name in {"td", "th"}:
+        return el
+    return el.find_parent(["td", "th"])
+
+
+def _table_geometry(soup: BeautifulSoup, cell_id: str) -> tuple[bool, dict]:
+    cell = _cell_for_edit_id(soup, cell_id)
+    if cell is None:
+        return False, {"status": 404, "error": f"table cell id {cell_id} not found"}
+    table = cell.find_parent("table")
+    if table is None:
+        return False, {"status": 400, "error": "selected element is not in a table"}
+    rows = _direct_table_rows(table)
+    if not rows:
+        return False, {"status": 400, "error": "table has no editable rows"}
+
+    grid: list[list[Tag]] = []
+    selected_row = selected_col = -1
+    for row_index, row in enumerate(rows):
+        cells = _row_cells(row)
+        if not cells:
+            return False, {"status": 400, "error":
+                "table structure edits require every row to have cells"}
+        grid.append(cells)
+        for col_index, candidate in enumerate(cells):
+            if _positive_span(candidate, "rowspan") != 1 or _positive_span(candidate, "colspan") != 1:
+                return False, {"status": 400, "error":
+                    "table structure edits currently support simple tables only (no rowspan/colspan)"}
+            if candidate is cell:
+                selected_row = row_index
+                selected_col = col_index
+
+    width = len(grid[0])
+    if width == 0 or any(len(row) != width for row in grid):
+        return False, {"status": 400, "error":
+            "table structure edits currently require rectangular tables"}
+    if selected_row < 0 or selected_col < 0:
+        return False, {"status": 400, "error": "selected cell is not in this table"}
+    return True, {
+        "cell": cell,
+        "table": table,
+        "rows": rows,
+        "grid": grid,
+        "row_index": selected_row,
+        "col_index": selected_col,
+        "width": width,
+    }
+
+
+def _strip_clone_identity(el: Tag) -> None:
+    for attr in ("data-edit-id", "id"):
+        if el.has_attr(attr):
+            del el[attr]
+    for child in el.find_all(True):
+        for attr in ("data-edit-id", "id"):
+            if child.has_attr(attr):
+                del child[attr]
+
+
+def _blank_text_nodes(el: Tag) -> None:
+    for child in list(el.contents):
+        if isinstance(child, NavigableString):
+            child.replace_with(NavigableString(""))
+        elif isinstance(child, Tag):
+            _blank_text_nodes(child)
+
+
+def _blank_clone(el: Tag) -> Tag:
+    clone = copy.deepcopy(el)
+    _strip_clone_identity(clone)
+    _blank_text_nodes(clone)
+    return clone
+
+
+def table_operation(
+    soup: BeautifulSoup,
+    cell_id: str,
+    action: str,
+) -> tuple[bool, dict]:
+    if action not in TABLE_ACTIONS:
+        return False, {"status": 400, "error":
+            "unknown table action"}
+    ok, geometry = _table_geometry(soup, cell_id)
+    if not ok:
+        return ok, geometry
+
+    table: Tag = geometry["table"]
+    if action.startswith("col-") and (
+        table.find("colgroup", recursive=False) or table.find("col", recursive=False)
+    ):
+        return False, {"status": 400, "error":
+            "column structure edits don't support tables with colgroup/col yet"}
+
+    rows: list[Tag] = geometry["rows"]
+    grid: list[list[Tag]] = geometry["grid"]
+    row_index: int = geometry["row_index"]
+    col_index: int = geometry["col_index"]
+    width: int = geometry["width"]
+    row = rows[row_index]
+    cell = geometry["cell"]
+    selection: Optional[Tag] = cell
+
+    if action == "row-insert-before" or action == "row-insert-after":
+        new_row = _blank_clone(row)
+        if action.endswith("before"):
+            row.insert_before(new_row)
+        else:
+            row.insert_after(new_row)
+        assign_missing_edit_ids(soup)
+        new_cells = _row_cells(new_row)
+        selection = new_cells[min(col_index, len(new_cells) - 1)] if new_cells else new_row
+
+    elif action == "row-delete":
+        if len(rows) <= 1:
+            return False, {"status": 400, "error": "can't delete the only row in a table"}
+        neighbor_row = rows[row_index + 1] if row_index + 1 < len(rows) else rows[row_index - 1]
+        neighbor_cells = _row_cells(neighbor_row)
+        selection = neighbor_cells[min(col_index, len(neighbor_cells) - 1)]
+        row.decompose()
+
+    elif action == "row-move-up" or action == "row-move-down":
+        sibling_rows = [
+            child for child in row.parent.children
+            if isinstance(child, Tag) and child.name == "tr"
+        ]
+        sibling_index = sibling_rows.index(row)
+        if action.endswith("up"):
+            if sibling_index == 0:
+                return False, {"status": 400, "error": "row is already first in its section"}
+            sibling_rows[sibling_index - 1].insert_before(row.extract())
+        else:
+            if sibling_index == len(sibling_rows) - 1:
+                return False, {"status": 400, "error": "row is already last in its section"}
+            sibling_rows[sibling_index + 1].insert_after(row.extract())
+        selection = cell
+
+    elif action == "col-insert-before" or action == "col-insert-after":
+        inserted: list[Tag] = []
+        for cells in grid:
+            reference = cells[col_index]
+            new_cell = _blank_clone(reference)
+            if action.endswith("before"):
+                reference.insert_before(new_cell)
+            else:
+                reference.insert_after(new_cell)
+            inserted.append(new_cell)
+        assign_missing_edit_ids(soup)
+        selection = inserted[row_index]
+
+    elif action == "col-delete":
+        if width <= 1:
+            return False, {"status": 400, "error": "can't delete the only column in a table"}
+        target_col = col_index + 1 if col_index < width - 1 else col_index - 1
+        selection = grid[row_index][target_col]
+        for cells in grid:
+            cells[col_index].decompose()
+
+    elif action == "col-move-left" or action == "col-move-right":
+        if action.endswith("left"):
+            if col_index == 0:
+                return False, {"status": 400, "error": "column is already first"}
+            for cells in grid:
+                cells[col_index - 1].insert_before(cells[col_index].extract())
+        else:
+            if col_index == width - 1:
+                return False, {"status": 400, "error": "column is already last"}
+            for cells in grid:
+                cells[col_index + 1].insert_after(cells[col_index].extract())
+        selection = cell
+
+    selection_id = selection.get("data-edit-id") if selection else None
+    return True, {
+        "ok": True,
+        "action": action,
+        "cell_id": cell_id,
+        "selection_id": selection_id,
+    }
+
+
+def duplicate_element(
+    soup: BeautifulSoup,
+    edit_id: str,
+) -> tuple[bool, dict]:
+    el = find_by_edit_id(soup, edit_id)
+    if el is None:
+        return False, {"status": 404, "error": f"id {edit_id} not found"}
+    if el.parent is None:
+        return False, {"status": 400, "error": "selected element has no parent"}
+    if not is_inside_svg(el) and el.find_parent("table") is not None and el.name != "table":
+        return False, {"status": 400, "error":
+            "table internals should be duplicated with the row/column table actions"}
+    if is_inside_svg(el):
+        if el.name == "g":
+            if not el.find("text") or el.find("g", attrs={"data-edit-id": True}):
+                return False, {"status": 400, "error":
+                    "only leaf labelled SVG groups can be duplicated"}
+        elif el.name == "text":
+            if el.find_parent("g", attrs={"data-edit-id": True}):
+                return False, {"status": 400, "error":
+                    "duplicate the labelled SVG group, not text inside it"}
+        else:
+            return False, {"status": 400, "error":
+                "only labelled SVG groups/text can be duplicated"}
+
+    clone = copy.deepcopy(el)
+    _strip_clone_identity(clone)
+    if is_inside_svg(el):
+        current = clone.get("transform") or ""
+        clone["transform"] = ("translate(12.00 12.00) " + current).strip()
+    el.insert_after(clone)
+    assign_missing_edit_ids(soup)
+    new_id = clone.get("data-edit-id")
+    return True, {
+        "ok": True,
+        "id": edit_id,
+        "new_id": new_id,
+        "tag": clone.name,
+    }
 
 
 def update_svg_labels(

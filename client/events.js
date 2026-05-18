@@ -32,7 +32,72 @@ export function deselect() {
   dom.selectBox.style.display = "none";
   dom.toolbar.hidden = true;
   dom.commentBox.hidden = true;
+  dom.tableMenu.hidden = true;
   dom.svgEditor.hidden = true;
+}
+
+function placeTableMenu() {
+  const tb = dom.toolbar.getBoundingClientRect();
+  const menu = dom.tableMenu;
+  let top = tb.bottom + window.scrollY + 6;
+  let left = tb.left + window.scrollX;
+  const width = menu.offsetWidth || 280;
+  const maxLeft = window.scrollX + window.innerWidth - width - 8;
+  if (left > maxLeft) left = maxLeft;
+  if (left < window.scrollX + 4) left = window.scrollX + 4;
+  menu.style.top = top + "px";
+  menu.style.left = left + "px";
+}
+
+function toggleTableMenu(force) {
+  const show = typeof force === "boolean" ? force : dom.tableMenu.hidden;
+  if (!show) {
+    dom.tableMenu.hidden = true;
+    return;
+  }
+  if (!state.selected || state.editing || !gridCellFrom(state.selected)) {
+    flash("Select a table cell first.", { kind: "warning" });
+    return;
+  }
+  dom.tableMenu.hidden = false;
+  placeTableMenu();
+}
+
+async function performTableOperation(action) {
+  const cell = gridCellFrom(state.selected);
+  if (!cell) {
+    flash("Select a table cell first.", { kind: "warning" });
+    return;
+  }
+  try {
+    const result = await api.tableOperation(cell.getAttribute("data-edit-id"), action);
+    if (result.selection_id) {
+      sessionStorage.setItem("__edit_restore_selection", result.selection_id);
+    }
+    const label = action.replace(/-/g, " ");
+    flash(`Table ${label} done.`, { kind: "success" });
+    reloadAfterMutation({ delay: 220 });
+  } catch (err) {
+    flash("Table change failed: " + err.message, { kind: "error", timeout: 3600 });
+  }
+}
+
+async function performDuplicate() {
+  const target = targetFor(state.selected);
+  if (!target) {
+    flash("Select an element to duplicate.", { kind: "warning" });
+    return;
+  }
+  try {
+    const result = await api.duplicateElement(target.id);
+    if (result.new_id) {
+      sessionStorage.setItem("__edit_restore_selection", result.new_id);
+    }
+    flash("Duplicated element.", { kind: "success" });
+    reloadAfterMutation({ delay: 220 });
+  } catch (err) {
+    flash("Duplicate failed: " + err.message, { kind: "error", timeout: 3600 });
+  }
 }
 
 async function performHistory(action) {
@@ -399,6 +464,7 @@ export function initEvents() {
       if (state.svgEditing){ e.preventDefault(); finishSvgLabelEdit(false); return; }
       if (state.editing)   return; // edit handler owns its own cancel
       if (!dom.commentBox.hidden) { e.preventDefault(); dom.commentBox.hidden = true; return; }
+      if (!dom.tableMenu.hidden)  { e.preventDefault(); dom.tableMenu.hidden = true; return; }
       if (!dom.helpOverlay.hidden){ e.preventDefault(); toggleHelp(false); return; }
       if (state.selected)  { e.preventDefault(); deselect(); return; }
       return;
@@ -493,12 +559,23 @@ export function initEvents() {
     else if (act === "comment")    startComment();
     else if (act === "undo")       performHistory("undo");
     else if (act === "redo")       performHistory("redo");
+    else if (act === "duplicate")  performDuplicate();
+    else if (act === "table")      toggleTableMenu();
     else if (act === "close")      deselect();
     else if (act === "nav-prev")   navigate("left");
     else if (act === "nav-parent") navigate("up");
     else if (act === "nav-child")  navigate("down");
     else if (act === "nav-next")   navigate("right");
     else if (act === "help")       toggleHelp();
+  });
+
+  dom.tableMenu.addEventListener("click", (e) => {
+    const btn = e.target.closest && e.target.closest("[data-table-act]");
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    dom.tableMenu.hidden = true;
+    void performTableOperation(btn.dataset.tableAct);
   });
 
   dom.helpOverlay.addEventListener("click", (e) => {
@@ -521,9 +598,11 @@ export function initEvents() {
       return;
     }
     if (e.key === "Escape") {
+      if (dom.commentBox.hidden) return;
       e.preventDefault();
       e.stopPropagation();
       dom.commentBox.hidden = true;
+      dom.commentTA.blur();
     }
   });
 
