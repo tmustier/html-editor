@@ -95,7 +95,8 @@ export function initDom() {
           <tr><td><kbd>Cmd</kbd><kbd>Y</kbd> / <kbd>Cmd</kbd><kbd>Shift</kbd><kbd>Z</kbd></td><td>Redo</td></tr>
           <tr><td><kbd>Arrow keys</kbd></td><td>Move between table/grid cells when a cell is selected</td></tr>
           <tr><td><kbd>Cmd</kbd><kbd>Arrow keys</kbd></td><td>Jump to the edge of the current table row/column</td></tr>
-          <tr><td><kbd>Shift</kbd><kbd>Space</kbd> / <kbd>Ctrl</kbd><kbd>Space</kbd></td><td>Select the current table row / column (Option+Space also selects column if macOS owns Ctrl+Space)</td></tr>
+          <tr><td><kbd>Shift</kbd><kbd>Space</kbd> / <kbd>Ctrl</kbd><kbd>Space</kbd></td><td>Select row/column. With a range → those rows/cols. Row + Ctrl+Space (or column + Shift+Space) → whole table. Works inside edit mode too (commits the cell first).</td></tr>
+          <tr><td><kbd>Shift</kbd>+arrow keys</td><td>Extend a rectangular cell range from the anchor cell (Excel-style)</td></tr>
           <tr><td><kbd>Row/column handles</kbd></td><td>Click to select a row or column; drag to reorder</td></tr>
           <tr><td><kbd>+</kbd> edge zones</td><td>Hover the table's right or bottom edge to append a column or row</td></tr>
           <tr><td><kbd>Cmd</kbd><kbd>X</kbd> → <kbd>Cmd</kbd><kbd>V</kbd></td><td>Cut a selected row/column and paste-as-move on another row/column (same table)</td></tr>

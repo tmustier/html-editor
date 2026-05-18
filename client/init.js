@@ -73,6 +73,11 @@ export function initRuntime() {
     beginDrag,
     target: currentTarget,
     selectionMode: () => state.tableSelectionMode,
+    tableRange: () => {
+      if (!state.tableRange) return null;
+      const { anchor, focus } = state.tableRange;
+      return { anchor: { ...anchor }, focus: { ...focus } };
+    },
     undo: () => performHistory("undo"),
     redo: () => performHistory("redo"),
   };

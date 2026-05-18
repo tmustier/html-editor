@@ -6,7 +6,17 @@
 export const state = {
   hovered: null,             // currently hovered editable element (or null)
   selected: null,            // currently selected editable element (or null)
-  tableSelectionMode: null,  // null, "row", or "column" when a table range is selected
+  // Active table selection mode:
+  //   null      → single cell (or non-table) selection
+  //   "range"   → rectangular multi-cell selection in one table
+  //   "row"     → entire row(s) selected (uses tableRange row span if set)
+  //   "column"  → entire column(s) selected (uses tableRange col span if set)
+  //   "table"   → entire table selected
+  tableSelectionMode: null,
+  // Active table range. Anchor is the original cell of the selection;
+  // focus is the far corner. Range is only meaningful while the selected
+  // element is a cell in the same table.
+  tableRange: null,          // { table, anchor: {row,col}, focus: {row,col} } | null
   editing: false,            // true while an inline HTML or SVG edit is active
   svgEditing: null,          // SVG edit session object, or null
   dragging: null,            // drag session object (reorder / svg / resize / table-line) or null

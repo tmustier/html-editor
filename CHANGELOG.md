@@ -4,6 +4,41 @@ All notable changes to `html-editor` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project follows
 [Semantic Versioning](https://semver.org/).
 
+## 0.1.6 — 2026-05-18
+
+### Added
+
+- **Excel-style cell range selection.** With a table cell selected, `Shift+→`,
+  `Shift+←`, `Shift+↑`, `Shift+↓` extend a rectangular range from the anchor
+  cell. Bare arrow keys collapse the range and move a single cell.
+- **Promote a multi-cell range to rows/columns.** With a multi-cell range,
+  `Shift+Space` selects every row the range spans and `Ctrl+Space` (or
+  `Option+Space`) selects every column. The range is preserved so the
+  promotion keeps growing/shrinking with subsequent `Shift+Arrow` presses
+  in the same axis.
+- **Whole-table mode.** From row mode, `Ctrl+Space` escalates to a
+  whole-table selection; from column mode, `Shift+Space` does the same.
+  `Escape` steps back down: `table → range/cell`, `row/col → range/cell`,
+  `range → cell`, `cell → deselect`. (Table mode collapses straight to the
+  range or anchor cell because we don't track which axis you came from.)
+- **Edit-mode flip.** While editing a cell, `Shift+Space` / `Ctrl+Space` /
+  `Option+Space` saves the in-progress edit and switches straight to row /
+  column selection on that cell.
+
+### Changed
+
+- Multi-row / multi-column cut + paste (`Cmd+X` / `Cmd+V`) is rejected for
+  now with an explanatory toast — single-line cut/paste only.
+- Multi-row / multi-column insert/delete (`Ctrl+Shift+=` / `Ctrl+-`) acts on
+  the first row/column of the selection and surfaces a hint toast.
+- Toolbar / breadcrumb badge now shows `range`, `row`, `column`, or `table`
+  to make the current selection mode explicit.
+
+### Notes
+
+- v0.1.6 keeps Excel's axis convention: `Shift+Space` → row,
+  `Ctrl+Space` → column. Tell me if you'd prefer the inverse.
+
 ## 0.1.5 — 2026-05-18
 
 ### Added

@@ -246,16 +246,144 @@ function uniqueCells(cells) {
   });
 }
 
+// Cells the current table selection covers, given the active mode. Honors
+// `state.tableRange` when it refers to the same table so multi-row, multi-col,
+// and multi-cell ranges all light up.
 export function tableSelectionCells(el, mode) {
   const cell = gridCellFrom(el);
   const grid = cell && gridForCell(cell);
   if (!grid || !mode) return [];
   const { matrix, position } = grid;
-  if (mode === "row") return uniqueCells(matrix[position.row] || []);
-  if (mode === "column") {
-    return uniqueCells(matrix.map((row) => row && row[position.col]).filter(Boolean));
+  const range = state.tableRange && state.tableRange.table === grid.table
+    ? state.tableRange
+    : null;
+
+  if (mode === "table") {
+    return uniqueCells(matrix.flatMap((row) => row || []).filter(Boolean));
   }
+
+  if (mode === "range") {
+    if (!range) return [cell];
+    const r1 = Math.min(range.anchor.row, range.focus.row);
+    const r2 = Math.max(range.anchor.row, range.focus.row);
+    const c1 = Math.min(range.anchor.col, range.focus.col);
+    const c2 = Math.max(range.anchor.col, range.focus.col);
+    const out = [];
+    for (let r = r1; r <= r2; r += 1) {
+      for (let c = c1; c <= c2; c += 1) {
+        if (matrix[r] && matrix[r][c]) out.push(matrix[r][c]);
+      }
+    }
+    return uniqueCells(out);
+  }
+
+  if (mode === "row") {
+    const r1 = range ? Math.min(range.anchor.row, range.focus.row) : position.row;
+    const r2 = range ? Math.max(range.anchor.row, range.focus.row) : position.row;
+    const out = [];
+    for (let r = r1; r <= r2; r += 1) out.push(...(matrix[r] || []));
+    return uniqueCells(out);
+  }
+
+  if (mode === "column") {
+    const c1 = range ? Math.min(range.anchor.col, range.focus.col) : position.col;
+    const c2 = range ? Math.max(range.anchor.col, range.focus.col) : position.col;
+    const out = [];
+    matrix.forEach((row) => {
+      for (let c = c1; c <= c2; c += 1) {
+        if (row && row[c]) out.push(row[c]);
+      }
+    });
+    return uniqueCells(out);
+  }
+
   return [];
+}
+
+// Cells spanning the *rows* the current selection covers (for handle placement
+// regardless of selection mode). Multi-row in range/row mode, full table in
+// table mode, single row in cell/column mode.
+export function tableRowSpanCells(el) {
+  const cell = gridCellFrom(el);
+  const grid = cell && gridForCell(cell);
+  if (!grid) return [];
+  const { matrix, position } = grid;
+  if (state.tableSelectionMode === "table") {
+    return uniqueCells(matrix.flatMap((row) => row || []).filter(Boolean));
+  }
+  const range = state.tableRange && state.tableRange.table === grid.table
+    ? state.tableRange
+    : null;
+  const wantMulti = state.tableSelectionMode === "row"
+    || state.tableSelectionMode === "range";
+  const r1 = (range && wantMulti) ? Math.min(range.anchor.row, range.focus.row) : position.row;
+  const r2 = (range && wantMulti) ? Math.max(range.anchor.row, range.focus.row) : position.row;
+  const out = [];
+  for (let r = r1; r <= r2; r += 1) out.push(...(matrix[r] || []));
+  return uniqueCells(out);
+}
+
+// Cells spanning the *columns* the current selection covers.
+export function tableColSpanCells(el) {
+  const cell = gridCellFrom(el);
+  const grid = cell && gridForCell(cell);
+  if (!grid) return [];
+  const { matrix, position } = grid;
+  if (state.tableSelectionMode === "table") {
+    return uniqueCells(matrix.flatMap((row) => row || []).filter(Boolean));
+  }
+  const range = state.tableRange && state.tableRange.table === grid.table
+    ? state.tableRange
+    : null;
+  const wantMulti = state.tableSelectionMode === "column"
+    || state.tableSelectionMode === "range";
+  const c1 = (range && wantMulti) ? Math.min(range.anchor.col, range.focus.col) : position.col;
+  const c2 = (range && wantMulti) ? Math.max(range.anchor.col, range.focus.col) : position.col;
+  const out = [];
+  matrix.forEach((row) => {
+    for (let c = c1; c <= c2; c += 1) {
+      if (row && row[c]) out.push(row[c]);
+    }
+  });
+  return uniqueCells(out);
+}
+
+// Mutate `state.tableRange` to extend the focus corner by one cell.
+// Returns true if a visible change happened.
+export function extendTableRange(direction) {
+  const cell = gridCellFrom(state.selected);
+  const grid = cell && gridForCell(cell);
+  if (!grid) return false;
+  const table = grid.table;
+  const here = state.tableRange && state.tableRange.table === table
+    ? state.tableRange
+    : {
+        table,
+        anchor: { row: grid.position.row, col: grid.position.col },
+        focus: { row: grid.position.row, col: grid.position.col },
+      };
+  const maxRow = grid.matrix.length - 1;
+  const maxCol = (grid.matrix[0] || []).length - 1;
+  const next = { row: here.focus.row, col: here.focus.col };
+  if (direction === "up")    next.row = Math.max(0, here.focus.row - 1);
+  if (direction === "down")  next.row = Math.min(maxRow, here.focus.row + 1);
+  if (direction === "left")  next.col = Math.max(0, here.focus.col - 1);
+  if (direction === "right") next.col = Math.min(maxCol, here.focus.col + 1);
+  if (next.row === here.focus.row && next.col === here.focus.col) return false;
+  here.focus = next;
+  state.tableRange = here;
+  const collapsed = next.row === here.anchor.row && next.col === here.anchor.col;
+  // Range extension keeps row/column promotion when the user is already in
+  // those modes; otherwise it lights up the rectangle.
+  if (state.tableSelectionMode !== "row" && state.tableSelectionMode !== "column") {
+    state.tableSelectionMode = collapsed ? null : "range";
+  }
+  if (collapsed) state.tableRange = null;
+  return true;
+}
+
+export function clearTableRange() {
+  state.tableRange = null;
 }
 
 export function gridForElement(el) {
@@ -637,8 +765,10 @@ function placeTableHandles(el) {
     dom.colHandle.style.display = "none";
     return;
   }
-  const rowRect = unionDocumentRect(tableSelectionCells(cell, "row"));
-  const colRect = unionDocumentRect(tableSelectionCells(cell, "column"));
+  const rowRect = unionDocumentRect(tableRowSpanCells(cell));
+  const colRect = unionDocumentRect(tableColSpanCells(cell));
+  const rowActive = state.tableSelectionMode === "row" || state.tableSelectionMode === "table";
+  const colActive = state.tableSelectionMode === "column" || state.tableSelectionMode === "table";
   if (rowRect) {
     const outsideLeft = rowRect.left - 12;
     const clampedLeft = outsideLeft < window.scrollX + 2
@@ -649,7 +779,7 @@ function placeTableHandles(el) {
     dom.rowHandle.style.left = clampedLeft + "px";
     dom.rowHandle.style.width = "10px";
     dom.rowHandle.style.height = rowRect.height + "px";
-    dom.rowHandle.dataset.active = state.tableSelectionMode === "row" ? "true" : "false";
+    dom.rowHandle.dataset.active = rowActive ? "true" : "false";
   } else {
     dom.rowHandle.style.display = "none";
   }
@@ -663,7 +793,7 @@ function placeTableHandles(el) {
     dom.colHandle.style.left = colRect.left + "px";
     dom.colHandle.style.width = colRect.width + "px";
     dom.colHandle.style.height = "10px";
-    dom.colHandle.dataset.active = state.tableSelectionMode === "column" ? "true" : "false";
+    dom.colHandle.dataset.active = colActive ? "true" : "false";
   } else {
     dom.colHandle.style.display = "none";
   }
@@ -797,7 +927,13 @@ export function toggleHelp(force) {
 
 // Re-exported by events.js; defined here because selectElement depends on a
 // few targets-module helpers.
-export function selectElementInternal(el, tableSelectionMode = null) {
+export function selectElementInternal(el, tableSelectionMode = null, options = {}) {
+  // Reset any active range when selecting a brand-new element, unless the
+  // caller is explicitly preserving it (e.g. during a Shift+Arrow extension
+  // or a same-cell mode promotion). A plain click on another cell, even in
+  // the same table, should drop the stale range so the next Shift+Space /
+  // Ctrl+Space promotes the new cell rather than the old range.
+  if (!options.preserveRange) state.tableRange = null;
   state.selected = el;
   state.tableSelectionMode = tableSelectionMode;
   state.hovered = null;

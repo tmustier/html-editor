@@ -15,7 +15,9 @@ import { reloadAfterMutation } from "./interaction.js";
 import { state } from "./state.js";
 import {
   currentTarget,
+  ensureVisible,
   firstEditableChild,
+  gridCellFrom,
   hasChildElements,
   isSvgGroup,
   isSvgText,
@@ -132,6 +134,23 @@ function startHtmlTextEdit(el, clickX, clickY) {
       e.preventDefault();
       e.stopPropagation();
       finish(true);
+    } else if (e.key === " " && gridCellFrom(el)) {
+      // Shift+Space / Ctrl+Space (or Option+Space on macOS) inside an edit
+      // session flips out of edit mode and into row/column selection on the
+      // current cell. Save first so the in-progress edit is committed.
+      const wantsRow = e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey;
+      const wantsCol = (e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey)
+        || (e.altKey && !e.metaKey && !e.ctrlKey && !e.shiftKey);
+      if (wantsRow || wantsCol) {
+        e.preventDefault();
+        e.stopPropagation();
+        const axis = wantsRow ? "row" : "column";
+        void (async () => {
+          await finish(true);
+          selectElementInternal(el, axis);
+          ensureVisible(el);
+        })();
+      }
     }
   };
   el.addEventListener("blur",    onBlur, true);

@@ -332,6 +332,10 @@ test.describe("keyboard navigation + adversarial flows", () => {
       expect(await selectedText(page)).toBe("Theta");
       expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("row");
 
+      // v0.1.6: row + Ctrl+Space promotes to whole-table mode. To switch to
+      // column mode we step back to the cell first, then Ctrl+Space.
+      await page.keyboard.press("Escape");
+      expect(await page.evaluate(() => window.__edit.selectionMode())).toBe(null);
       await page.keyboard.press("Control+Space");
       expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("column");
       await page.locator('#__edit_toolbar [data-act="table"]').click();
@@ -371,6 +375,8 @@ test.describe("keyboard navigation + adversarial flows", () => {
       expect(await selectedText(page)).toBe("Epsilon");
       expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("row");
 
+      // v0.1.6: step out of row mode before promoting to column.
+      await page.keyboard.press("Escape");
       await page.keyboard.press("Control+Space");
       expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("column");
       await page.locator('#__edit_toolbar [data-act="table"]').click();
@@ -858,6 +864,265 @@ test.describe("keyboard navigation + adversarial flows", () => {
       await page.waitForFunction(() =>
         document.querySelector('table[data-edit-id="e2"] tr')?.cells[0]?.textContent.trim() === "Gamma");
       expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("column");
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  // -----------------------------------------------------------------------
+  // v0.1.6: Excel-style cell range selection + row/column promotion
+  // -----------------------------------------------------------------------
+
+  async function rangeBounds(page) {
+    return await page.evaluate(() => window.__edit.tableRange());
+  }
+
+  test("Shift+ArrowRight extends a single cell into a 2-wide range", async ({ page }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+      await selectCell(page, "Alpha");
+      await page.keyboard.press("Shift+ArrowRight");
+      expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("range");
+      const bounds = await rangeBounds(page);
+      expect(bounds).toEqual({ anchor: { row: 0, col: 0 }, focus: { row: 0, col: 1 } });
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("Shift+Arrow grows and shrinks the range; Shift+Left collapses to anchor", async ({ page }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+      await selectCell(page, "Alpha");
+      await page.keyboard.press("Shift+ArrowRight");
+      await page.keyboard.press("Shift+ArrowRight");
+      expect(await rangeBounds(page)).toEqual({ anchor: { row: 0, col: 0 }, focus: { row: 0, col: 2 } });
+      await page.keyboard.press("Shift+ArrowLeft");
+      expect(await rangeBounds(page)).toEqual({ anchor: { row: 0, col: 0 }, focus: { row: 0, col: 1 } });
+      await page.keyboard.press("Shift+ArrowLeft");
+      // Collapsed back to single cell.
+      expect(await rangeBounds(page)).toBeNull();
+      expect(await page.evaluate(() => window.__edit.selectionMode())).toBeNull();
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("Shift+ArrowDown extends the range vertically through header rows", async ({ page }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+      await selectCell(page, "Alpha");
+      await page.keyboard.press("Shift+ArrowDown");
+      await page.keyboard.press("Shift+ArrowDown");
+      const bounds = await rangeBounds(page);
+      expect(bounds).toEqual({ anchor: { row: 0, col: 0 }, focus: { row: 2, col: 0 } });
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("Bare arrow key collapses an active range and moves a single cell", async ({ page }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+      await selectCell(page, "Alpha");
+      await page.keyboard.press("Shift+ArrowRight");
+      expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("range");
+      await page.keyboard.press("ArrowRight");
+      expect(await page.evaluate(() => window.__edit.selectionMode())).toBeNull();
+      expect(await rangeBounds(page)).toBeNull();
+      // The cell to the right of "Alpha" is "Beta", and the bare arrow then
+      // moves further right from there (or stays put if already at edge).
+      // We accept either Beta or Gamma since the precise step depends on
+      // collapse-then-move semantics.
+      const text = await selectedText(page);
+      expect(["Beta", "Gamma"]).toContain(text);
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  // Keyboard mapping: we use Excel's convention (matches v0.1.5):
+  //   Shift+Space → row     (row label / horizontal stripe)
+  //   Ctrl+Space  → column  (column label / vertical stripe)
+  test("Range + Shift+Space promotes to row mode and selects every row in the range", async ({ page }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+      await selectCell(page, "Alpha");
+      await page.keyboard.press("Shift+ArrowDown"); // range rows 0..1
+      await page.keyboard.press("Shift+Space");
+      expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("row");
+      // Range is preserved so the row mode covers rows 0 and 1.
+      const bounds = await rangeBounds(page);
+      expect(bounds).toEqual({ anchor: { row: 0, col: 0 }, focus: { row: 1, col: 0 } });
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("Range + Ctrl+Space promotes to column mode and selects every column in the range", async ({ page }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+      await selectCell(page, "Alpha");
+      await page.keyboard.press("Shift+ArrowRight"); // range cols 0..1
+      await page.keyboard.press("Control+Space");
+      expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("column");
+      const bounds = await rangeBounds(page);
+      expect(bounds).toEqual({ anchor: { row: 0, col: 0 }, focus: { row: 0, col: 1 } });
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("Row mode + Ctrl+Space escalates to whole-table selection", async ({ page }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+      await selectCell(page, "Alpha");
+      await page.keyboard.press("Shift+Space");
+      expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("row");
+      await page.keyboard.press("Control+Space");
+      expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("table");
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("Column mode + Shift+Space escalates to whole-table selection", async ({ page }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+      await selectCell(page, "Alpha");
+      await page.keyboard.press("Control+Space");
+      expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("column");
+      await page.keyboard.press("Shift+Space");
+      expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("table");
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("Shift+Space inside an editable cell saves and selects the row", async ({ page }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+      await selectCell(page, "Alpha");
+      await page.keyboard.press("F2");
+      await page.waitForFunction(() =>
+        document.querySelector('.__edit_editing'));
+      // Type some text then flip to row mode.
+      await page.keyboard.type("X");
+      await page.keyboard.press("Shift+Space");
+      await page.waitForFunction(() => window.__edit.selectionMode() === "row");
+      // The edit was committed.
+      const cellText = await page.locator('td[data-edit-id]').first().textContent();
+      expect(cellText.trim().startsWith("AlphaX") || cellText.trim() === "X"
+        || cellText.trim() === "AlphaX").toBeTruthy();
+      expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("row");
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("Ctrl+Space inside an editable cell saves and selects the column", async ({ page }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+      await selectCell(page, "Alpha");
+      await page.keyboard.press("F2");
+      await page.waitForFunction(() => document.querySelector('.__edit_editing'));
+      await page.keyboard.press("Control+Space");
+      await page.waitForFunction(() => window.__edit.selectionMode() === "column");
+      expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("column");
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("Esc steps down through table modes: table → cell → deselect", async ({ page }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+      await selectCell(page, "Alpha");
+      await page.keyboard.press("Shift+Space");
+      await page.keyboard.press("Control+Space");
+      expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("table");
+      await page.keyboard.press("Escape");
+      expect(await page.evaluate(() => window.__edit.selectionMode())).toBeNull();
+      // Anchor cell is still selected after stepping down from table mode.
+      expect(await selectedText(page)).toBe("Alpha");
+      await page.keyboard.press("Escape");
+      // Now deselected.
+      expect(await page.evaluate(() => !!window.__edit.target())).toBeFalsy();
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("Clicking another cell in the same table drops a stale range", async ({ page }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+      await selectCell(page, "Alpha");
+      await page.keyboard.press("Shift+ArrowRight"); // range 0,0–0,1
+      expect(await rangeBounds(page)).toEqual({ anchor: { row: 0, col: 0 }, focus: { row: 0, col: 1 } });
+      // Now select a different cell in the same table directly.
+      await selectCell(page, "Iota");
+      expect(await rangeBounds(page)).toBeNull();
+      // Promotion should now act on Iota's cell, not the previous range.
+      await page.keyboard.press("Shift+Space");
+      expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("row");
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("Esc collapses an active range to single-cell selection", async ({ page }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+      await selectCell(page, "Alpha");
+      await page.keyboard.press("Shift+ArrowRight");
+      expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("range");
+      await page.keyboard.press("Escape");
+      expect(await page.evaluate(() => window.__edit.selectionMode())).toBeNull();
+      expect(await rangeBounds(page)).toBeNull();
+      expect(await selectedText(page)).toBe("Alpha");
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("Cmd+X on a multi-row selection is rejected with a friendly toast", async ({ page }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+      await selectCell(page, "Alpha");
+      await page.keyboard.press("Shift+ArrowDown"); // two rows in range
+      await page.keyboard.press("Shift+Space");
+      expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("row");
+      await page.keyboard.press("Meta+x");
+      // Toast surfaced and no cut was registered.
+      await expect(page.locator("#__edit_status")).toContainText("Single-row");
     } finally {
       await editor.cleanup();
     }

@@ -37,7 +37,7 @@ Comments are stored next to the HTML file in `<file>.comments.json`.
 - **Comment** — leave comments anchored to specific elements; they show up in a sidebar and survive reloads.
 - **Undo / redo** — every save, move, resize, duplicate, and table-structure change is snapshotted on disk.
 - **Spreadsheet paste** — paste an Excel/Sheets-style range into a table cell to fill the existing table rectangle from that cell; overflow is clipped rather than adding rows/columns.
-- **Table structure edits** — select a table cell, press `Shift+Space` for its row or `Ctrl+Space` for its column (`Option+Space` also works if macOS owns `Ctrl+Space`), or click the left/top handles; then use the Table toolbar button to insert/delete/reorder rows and columns.
+- **Table structure edits** — select a table cell, press `Shift+Space` for its row or `Ctrl+Space` for its column (`Option+Space` also works if macOS owns `Ctrl+Space`), or click the left/top handles; then use the Table toolbar button to insert/delete/reorder rows and columns. `Shift+Arrow` extends a rectangular cell range; promote that range with `Shift+Space` / `Ctrl+Space` to cover every row/column it spans; press both (in any order) to select the whole table.
 - **Drag row/column handles** — grab the left or top selection handle and drag along the table to reorder; a purple drop line shows where the line will land.
 - **“+” edge zones** — hover any cell of a table and a thin “+” strip appears along the table’s bottom and right edges; click it to append a new row or column at the end.
 - **Excel cut + paste** — select a row/column and press `Cmd+X`; marching ants mark the cut line. Select another row/column in the same table and press `Cmd+V` to move it into that position.
@@ -60,7 +60,9 @@ Comments are stored next to the HTML file in `<file>.comments.json`.
 | `Cmd+Z` / `Cmd+Y` (`Cmd+Shift+Z`) | Undo / redo last saved edit or move |
 | Arrow keys | Move between table/grid cells when a cell is selected |
 | `Cmd+Arrow keys` | Jump to the edge of the current table row/column |
-| `Shift+Space` / `Ctrl+Space` | Select the current table row / column (`Option+Space` also selects column) |
+| `Shift+Space` / `Ctrl+Space` | Select the current table row / column (`Option+Space` also selects column). Works inside edit mode — commits the cell, then promotes. |
+| `Shift`+arrows | Extend an Excel-style cell range from the anchor cell |
+| Row + `Ctrl+Space` or Column + `Shift+Space` | Escalate to whole-table selection (Esc steps back down) |
 | Row/column handles | Click the left/top table handles to select a row or column; drag to reorder |
 | `+` edge zones | Hover the table's right or bottom edge to append a column or row |
 | `Cmd+X` then `Cmd+V` | Cut a selected row/column and paste-as-move on another row/column (same table) |
