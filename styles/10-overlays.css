@@ -105,21 +105,25 @@ html.__edit_dragging-line #__edit_table_col_handle {
 #__edit_table_drop[data-axis="row"] { height: 3px; }
 #__edit_table_drop[data-axis="column"] { width: 3px; }
 
-/* Marching-ants outline for Cmd+X cut row/column. */
+/* Excel-style moving source outline for staged Cmd+X cuts.
+   Kept separate from #__edit_select so the active selection can move to a
+   destination while the transparent marching border stays on the source. */
 @keyframes __edit_marching_ants {
-  to { background-position: 16px 0, -16px 0, 0 16px, 0 -16px; }
+  to { background-position: 16px 0, -16px 100%, 0 16px, 100% -16px; }
 }
-#__edit_select[data-cut="true"] {
-  background-image:
-    linear-gradient(90deg, #7c3aed 50%, transparent 50%),
-    linear-gradient(90deg, #7c3aed 50%, transparent 50%),
-    linear-gradient(0deg,  #7c3aed 50%, transparent 50%),
-    linear-gradient(0deg,  #7c3aed 50%, transparent 50%);
-  background-repeat: repeat-x, repeat-x, repeat-y, repeat-y;
-  background-size: 8px 2px, 8px 2px, 2px 8px, 2px 8px;
-  background-position: 0 0, 0 100%, 0 0, 100% 0;
+#__edit_cut {
+  position: absolute;
+  pointer-events: none;
+  z-index: 2147483642;
+  display: none;
+  box-sizing: border-box;
+  border-radius: 3px;
+  background:
+    linear-gradient(90deg, #7c3aed 50%, transparent 50%) 0 0 / 8px 2px repeat-x,
+    linear-gradient(90deg, #7c3aed 50%, transparent 50%) 0 100% / 8px 2px repeat-x,
+    linear-gradient(0deg,  #7c3aed 50%, transparent 50%) 0 0 / 2px 8px repeat-y,
+    linear-gradient(0deg,  #7c3aed 50%, transparent 50%) 100% 0 / 2px 8px repeat-y;
   animation: __edit_marching_ants 0.6s linear infinite;
-  border-style: dashed;
 }
 
 /* The selectBox itself stays pointer-events:none so the user can keep

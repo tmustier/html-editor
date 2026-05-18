@@ -6,6 +6,14 @@ import { dom, flash, isOverlay } from "./dom.js";
 import { interactionLock, reloadAfterMutation } from "./interaction.js";
 import { sendComment, startComment } from "./comments.js";
 import { beginDrag, beginResize, cancelDrag } from "./drag.js";
+import {
+  clearCut,
+  commitLineCutInsertBeforeSelection,
+  commitLineCutPaste,
+  cutSourceIds,
+  stageLineCut,
+  stageRangeCut,
+} from "./cut.js";
 import { finishActiveEdit, finishSvgLabelEdit, startEdit } from "./editing.js";
 import { state } from "./state.js";
 import {
@@ -34,9 +42,6 @@ import {
 import {
   beginTableLineDrag,
   cancelTableLineDrag,
-  clearTableCut,
-  markTableCut,
-  pasteTableCut,
 } from "./tabledrag.js";
 
 export function selectElement(el, tableSelectionMode = null) {
@@ -83,8 +88,7 @@ export function deselect() {
   state.selected = null;
   state.tableSelectionMode = null;
   state.tableRange = null;
-  state.tableCut = null;
-  if (dom.selectBox) delete dom.selectBox.dataset.cut;
+  clearCut();
   dom.selectBox.style.display = "none";
   dom.rowHandle.style.display = "none";
   dom.colHandle.style.display = "none";
@@ -478,18 +482,25 @@ function rangeCellText(targetEl) {
 function rangeClipboardPayload() {
   const matrix = tableRangeMatrix();
   if (!matrix.length) return null;
-  const text = matrix
-    .map((row) => row.map((el) => escapeTsvCell(rangeCellText(el))).join("\t"))
+  const values = matrix.map((row) => row.map((el) => rangeCellText(el)));
+  const sourceIds = matrix.flat()
+    .filter(Boolean)
+    .map((el) => el.getAttribute("data-edit-id"))
+    .filter(Boolean);
+  const text = values
+    .map((row) => row.map((value) => escapeTsvCell(value)).join("\t"))
     .join("\n");
-  const htmlRows = matrix
-    .map((row) => "<tr>" + row.map((el) =>
-      `<td>${escapeHtmlText(rangeCellText(el))}</td>`).join("") + "</tr>")
+  const htmlRows = values
+    .map((row) => "<tr>" + row.map((value) =>
+      `<td>${escapeHtmlText(value)}</td>`).join("") + "</tr>")
     .join("");
   const html = `<table>${htmlRows}</table>`;
-  return { text, html, matrix };
+  return { text, html, matrix, values, sourceIds };
 }
 
 async function copySelectionToClipboard() {
+  // A fresh copy replaces/cancels any staged cut, matching spreadsheet UX.
+  if (state.cut) clearCut();
   if (state.tableSelectionMode === "range") {
     const payload = rangeClipboardPayload();
     if (payload) {
@@ -595,6 +606,10 @@ async function readClipboardPayload() {
 }
 
 async function pasteFromClipboard() {
+  if (state.cut) {
+    await pasteStagedCut();
+    return;
+  }
   try {
     const payload = await readClipboardPayload();
     if (state.tableSelectionMode === "range") {
@@ -612,26 +627,79 @@ async function pasteFromClipboard() {
   }
 }
 
-async function cutRangeToClipboard() {
+async function stageRangeCutFromSelection() {
   const payload = rangeClipboardPayload();
   if (!payload) {
     flash("Nothing to cut.", { kind: "warning" });
     return;
   }
-  try {
-    await writeClipboardPayload(payload.text, payload.html);
-  } catch (_err) {
-    flash("Couldn't write to clipboard.", { kind: "warning" });
-    return;
+  await stageRangeCut(payload, writeClipboardPayload);
+}
+
+function rangesOverlap(sourceIds, targets) {
+  const source = new Set(sourceIds);
+  return targets.some(({ el }) => source.has(el.getAttribute("data-edit-id")));
+}
+
+async function pasteStagedRangeCut() {
+  const cut = state.cut;
+  if (!cut || cut.kind !== "range") return false;
+  const anchor = state.tableSelectionMode === "range" ? rangeAnchorElement() : state.selected;
+  const targetCell = gridCellFrom(anchor);
+  if (!targetCell) {
+    flash("Select a destination table cell for the cut range.", { kind: "warning" });
+    return false;
   }
+  const matrix = cut.payload?.matrix;
+  if (!Array.isArray(matrix) || !matrix.length) {
+    clearCut();
+    flash("Cut range is no longer available.", { kind: "warning" });
+    return false;
+  }
+  const pasteTargets = gridPasteTargets(targetCell, matrix);
+  if (!pasteTargets.length) {
+    flash("No table cells available to paste into.", { kind: "warning" });
+    return false;
+  }
+  const requested = matrix.reduce((sum, row) => sum + row.length, 0);
+  if (pasteTargets.length < requested) {
+    flash("Cut range doesn't fit at that destination — choose a larger area.",
+      { kind: "warning" });
+    return false;
+  }
+  const sourceIds = cutSourceIds(cut);
+  if (rangesOverlap(sourceIds, pasteTargets)) {
+    flash("Overlapping cut range moves aren't supported yet.", { kind: "warning" });
+    return false;
+  }
+  const updates = pasteTargets.map(({ el, text }) => applyPlainTextToElement(el, text));
+  for (const id of sourceIds) {
+    const sourceEl = document.querySelector(`[data-edit-id="${CSS.escape(id)}"]`);
+    if (sourceEl) updates.push(applyPlainTextToElement(sourceEl, ""));
+  }
+  if (!updates.length) return false;
+  const selectedBeforeSave = state.selected;
   try {
-    const cleared = await clearRangeCells();
-    flash(`Cut ${cleared} cell${cleared === 1 ? "" : "s"}.`,
-      { kind: "success", timeout: 1000 });
+    await api.saveTextMany(updates);
+    clearCut();
+    if (selectedBeforeSave) {
+      placeBox(dom.selectBox, selectedBeforeSave);
+      placeToolbar(selectedBeforeSave);
+    }
+    flash(`Moved ${pasteTargets.length} cell${pasteTargets.length === 1 ? "" : "s"}.`,
+      { kind: "success" });
+    return true;
   } catch (err) {
-    flash("Cut failed: " + err.message, { kind: "error" });
-    reloadAfterMutation({ delay: 600 });
+    flash("Range move failed: " + err.message, { kind: "error" });
+    reloadAfterMutation({ delay: 800 });
+    return false;
   }
+}
+
+async function pasteStagedCut() {
+  if (!state.cut) return false;
+  if (state.cut.kind === "range") return pasteStagedRangeCut();
+  return commitLineCutPaste();
 }
 
 async function deleteRangeContents() {
@@ -666,6 +734,7 @@ export function initEvents() {
   // --- clipboard ----------------------------------------------------------
   document.addEventListener("copy", (e) => {
     if (!state.selected || state.editing || isNativeClipboardTarget(e.target)) return;
+    if (state.cut) clearCut();
     if (state.tableSelectionMode === "range") {
       // Excel-style multi-cell copy: TSV plus a minimal <table> HTML.
       if (!e.clipboardData) return;
@@ -690,6 +759,11 @@ export function initEvents() {
 
   document.addEventListener("paste", (e) => {
     if (!state.selected || state.editing || isNativeClipboardTarget(e.target)) return;
+    if (state.cut) {
+      e.preventDefault();
+      void pasteStagedCut();
+      return;
+    }
     if (state.tableSelectionMode === "range") {
       // Range mode owns Cmd+V: route through the Excel-style range-paste
       // path anchored on the range's top-left cell.
@@ -835,7 +909,7 @@ export function initEvents() {
       if (state.dragging)  { e.preventDefault(); cancelDrag(); return; }
       if (state.svgEditing){ e.preventDefault(); finishSvgLabelEdit(false); return; }
       if (state.editing)   return; // edit handler owns its own cancel
-      if (state.tableCut) { e.preventDefault(); clearTableCut(); flash("Cut cleared.", { kind: "info", timeout: 800 }); return; }
+      if (state.cut) { e.preventDefault(); clearCut(); flash("Cut cleared.", { kind: "info", timeout: 800 }); return; }
       if (!dom.commentBox.hidden) { e.preventDefault(); dom.commentBox.hidden = true; return; }
       if (!dom.tableMenu.hidden)  { e.preventDefault(); dom.tableMenu.hidden = true; return; }
       if (!dom.helpOverlay.hidden){ e.preventDefault(); toggleHelp(false); return; }
@@ -891,6 +965,14 @@ export function initEvents() {
       return;
     }
 
+    if ((e.key === "Backspace" || e.key === "Delete") && state.cut
+        && !inEditableField && !state.editing) {
+      e.preventDefault();
+      e.stopPropagation();
+      flash("Press Esc to cancel the staged cut before clearing cells.", { kind: "warning" });
+      return;
+    }
+
     // Range-aware delete / backspace: clear every cell in one batch.
     if ((e.key === "Backspace" || e.key === "Delete")
         && state.tableSelectionMode === "range" && state.selected
@@ -901,13 +983,13 @@ export function initEvents() {
       return;
     }
 
-    // Range-aware Cmd+X: copy then clear in one trip.
+    // Range-aware Cmd+X: stage an Excel-style cut, don't clear yet.
     if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && key === "x"
         && state.tableSelectionMode === "range" && state.selected
         && !inEditableField && !state.editing) {
       e.preventDefault();
       e.stopPropagation();
-      void cutRangeToClipboard();
+      void stageRangeCutFromSelection();
       return;
     }
 
@@ -930,24 +1012,23 @@ export function initEvents() {
           { kind: "warning" });
         return;
       }
-      markTableCut(state.tableSelectionMode);
+      void stageLineCut(state.tableSelectionMode, writeClipboardPayload);
       return;
     }
 
-    // Excel-style row/column paste-as-move if a cut is pending and the user
-    // has selected another row/column.
+    // Excel-style paste-as-move if a staged cut is pending.
     if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && key === "v"
-        && state.tableCut && singleLineSelection && state.selected
+        && state.cut && state.selected
         && !inEditableField && !state.editing) {
       e.preventDefault();
       e.stopPropagation();
-      if (lineSpan > 1) {
+      if (singleLineSelection && lineSpan > 1) {
         flash(
           `Single-${state.tableSelectionMode} cut/paste only.`,
           { kind: "warning" });
         return;
       }
-      void pasteTableCut();
+      void pasteStagedCut();
       return;
     }
 
@@ -964,6 +1045,7 @@ export function initEvents() {
       && (key === "z" || key === "y");
     if (isHistoryKey && !inEditableField && !state.editing) {
       e.preventDefault();
+      if (state.cut) clearCut();
       performHistory(key === "y" || e.shiftKey ? "redo" : "undo");
       return;
     }
@@ -977,6 +1059,20 @@ export function initEvents() {
     const isMinusDelete = (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey
       && (e.key === "-" || e.key === "_" || e.code === "Minus");
     if ((isPlusInsert || isMinusDelete) && !inEditableField && !state.editing) {
+      if (isPlusInsert && state.cut && ["row", "column"].includes(state.cut.kind)
+          && state.selected && gridCellFrom(state.selected)) {
+        e.preventDefault();
+        e.stopPropagation();
+        void commitLineCutInsertBeforeSelection();
+        return;
+      }
+      if (isPlusInsert && state.cut && state.cut.kind === "range") {
+        e.preventDefault();
+        e.stopPropagation();
+        flash("Insert cut only supports full rows/columns; use Cmd+V to move a range.",
+          { kind: "warning" });
+        return;
+      }
       if (singleLineSelection && state.selected) {
         e.preventDefault();
         e.stopPropagation();
@@ -1072,6 +1168,8 @@ export function initEvents() {
     const unmodified = !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey;
     if (e.key === "F2" || (unmodified && (e.key === "Enter" || key === "e"))) {
       e.preventDefault();
+      // Editing cancels a staged cut without mutating the source.
+      if (state.cut) clearCut();
       // In range mode, collapse to anchor cell before entering edit.
       if (state.tableSelectionMode === "range") collapseRangeToAnchor();
       startEdit();

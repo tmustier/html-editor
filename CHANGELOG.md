@@ -4,6 +4,30 @@ All notable changes to `html-editor` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project follows
 [Semantic Versioning](https://semver.org/).
 
+## Unreleased
+
+### Added
+
+- **Unified staged cuts.** `Cmd+X` on a row, column, or cell range now stages
+  the cut instead of immediately mutating the document. A dedicated transparent
+  marching border stays on the source while the active selection moves to a
+  destination.
+- **Insert staged rows/columns.** After cutting a row or column, `Cmd+Shift+=`
+  inserts that staged line before the current table position.
+- **Range cut move.** `Cmd+X` on a cell range followed by `Cmd+V` moves the
+  values to the destination and clears the source in one undoable batch.
+- **Server benchmark script.** `scripts/bench_server_table_ops.py` measures
+  parse/save/table-operation/batch-save hot paths.
+
+### Changed
+
+- `save-text-many` now validates the whole batch before mutating and uses a
+  one-pass edit-id index instead of repeatedly scanning the BeautifulSoup tree.
+- Server document mutations now share a document lock around
+  read/mutate/history/save sequences.
+- Row/column drag caches table line geometry at drag start instead of
+  rebuilding it on every mousemove.
+
 ## 0.1.7 — 2026-05-18
 
 ### Added

@@ -3,6 +3,7 @@
 
 import { dom } from "./dom.js";
 import { loadComments, startComment } from "./comments.js";
+import { placeCutOverlay } from "./cut.js";
 import { performHistory, selectElement, deselect } from "./events.js";
 import { state } from "./state.js";
 import {
@@ -32,6 +33,7 @@ export function initRuntime() {
       }
       if (state.svgEditing) positionSvgLabelInputs(state.svgEditing);
       if (state.hovered) placeBox(dom.hoverBox, state.hovered);
+      placeCutOverlay();
     });
   }
 
@@ -81,6 +83,7 @@ export function initRuntime() {
     },
     rangeCells: () => tableRangeMatrix().map((row) =>
       row.map((el) => (el ? (el.innerText || el.textContent || "").trim() : null))),
+    cut: () => state.cut ? JSON.parse(JSON.stringify(state.cut)) : null,
     undo: () => performHistory("undo"),
     redo: () => performHistory("redo"),
   };

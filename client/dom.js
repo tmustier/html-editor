@@ -23,6 +23,7 @@ export function initDom() {
     <div id="__edit_table_add_row" title="Click to add a new row at the bottom"></div>
     <div id="__edit_table_add_col" title="Click to add a new column on the right"></div>
     <div id="__edit_table_drop" hidden></div>
+    <div id="__edit_cut" hidden></div>
     <div id="__edit_select">
       <div class="__edit_border_drag bd-n" data-border-drag="n" title="Drag border to move"></div>
       <div class="__edit_border_drag bd-e" data-border-drag="e" title="Drag border to move"></div>
@@ -89,7 +90,8 @@ export function initDom() {
           <tr><td><kbd>F2</kbd> / <kbd>Enter</kbd> / <kbd>E</kbd></td><td>Edit selected text/label</td></tr>
           <tr><td><kbd>C</kbd></td><td>Add a comment</td></tr>
           <tr><td><kbd>Cmd</kbd><kbd>C</kbd> / <kbd>Cmd</kbd><kbd>V</kbd></td><td>Copy / paste the selected text box, table cell, or multi-cell range (TSV + HTML; clipped to the destination table)</td></tr>
-          <tr><td><kbd>Cmd</kbd><kbd>X</kbd> on a range</td><td>Cut every cell in the range (copy then clear in one undo step)</td></tr>
+          <tr><td><kbd>Cmd</kbd><kbd>X</kbd> on a row, column, or range</td><td>Stage an Excel-style cut with a moving source outline; paste or insert to commit</td></tr>
+          <tr><td><kbd>Cmd</kbd><kbd>Shift</kbd><kbd>+</kbd> after row/column cut</td><td>Insert the staged cut row/column before the current position</td></tr>
           <tr><td><kbd>Delete</kbd> / <kbd>Backspace</kbd> on a range</td><td>Clear every cell in the range in one undo step</td></tr>
           <tr><td><kbd>Drag border</kbd> / <kbd>Drag handle</kbd></td><td>Reorder HTML or reposition diagram item</td></tr>
           <tr><td><kbd>Duplicate</kbd> button</td><td>Clone the selected element with fresh edit IDs</td></tr>
@@ -146,6 +148,7 @@ export function initDom() {
     addRowZone:  root.querySelector("#__edit_table_add_row"),
     addColZone:  root.querySelector("#__edit_table_add_col"),
     tableDrop:   root.querySelector("#__edit_table_drop"),
+    cutBox:      root.querySelector("#__edit_cut"),
     selectBox:   root.querySelector("#__edit_select"),
     dropLine:    root.querySelector("#__edit_drop"),
     toolbar,

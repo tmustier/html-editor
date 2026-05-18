@@ -21,11 +21,6 @@ import {
 const NOOP_BG = "rgba(124, 58, 237, 0.18)";
 const MOVE_BG = "#7c3aed";
 
-function tableIdFor(cell) {
-  const table = cell && cell.closest && cell.closest("table");
-  return table ? table.getAttribute("data-edit-id") : null;
-}
-
 function clearDropIndicator() {
   if (!dom.tableDrop) return;
   dom.tableDrop.hidden = true;
@@ -122,8 +117,10 @@ export async function runMoveTo(axis, cellId, targetIndex, mode) {
     flash(axis === "row" ? "Row moved." : "Column moved.",
       { kind: "success", timeout: 1200 });
     reloadAfterMutation({ delay: 200 });
+    return true;
   } catch (err) {
     flash("Move failed: " + err.message, { kind: "error", timeout: 3000 });
+    return false;
   }
 }
 
@@ -134,81 +131,4 @@ export function cancelTableLineDrag() {
   document.removeEventListener("mousemove", onLineDragMove, true);
   document.removeEventListener("mouseup", onLineDragEnd, true);
   clearDropIndicator();
-}
-
-// --- Excel cut + paste ----------------------------------------------------
-
-export function markTableCut(axis) {
-  const cell = gridCellFrom(state.selected);
-  if (!cell || !["row", "column"].includes(axis)) return false;
-  const grid = gridForElement(state.selected);
-  if (!grid) return false;
-  const tableId = tableIdFor(cell);
-  const index = axis === "row"
-    ? tableRowIndexOf(cell)?.index
-    : grid.position.col;
-  if (index == null) return false;
-  state.tableCut = { kind: axis, tableId, index, cellId: cell.getAttribute("data-edit-id") };
-  refreshCutMarker();
-  flash(axis === "row" ? "Row cut — paste over another row to move it."
-                       : "Column cut — paste over another column to move it.",
-    { kind: "info", timeout: 1800 });
-  return true;
-}
-
-export function clearTableCut() {
-  if (!state.tableCut) return;
-  state.tableCut = null;
-  refreshCutMarker();
-}
-
-export function refreshCutMarker() {
-  const cut = state.tableCut;
-  if (!dom.selectBox) return;
-  if (!cut) { delete dom.selectBox.dataset.cut; return; }
-  const cell = gridCellFrom(state.selected);
-  const sameAxis = state.tableSelectionMode === cut.kind;
-  const sameTable = cell && tableIdFor(cell) === cut.tableId;
-  const grid = cell && gridForElement(state.selected);
-  const sameLine = sameTable && grid && (
-    cut.kind === "row"
-      ? tableRowIndexOf(cell)?.index === cut.index
-      : grid.position.col === cut.index
-  );
-  if (sameAxis && sameLine) dom.selectBox.dataset.cut = "true";
-  else delete dom.selectBox.dataset.cut;
-}
-
-// Cmd+V on another row/column in the same table → moves the cut line.
-// Excel "insert cut" semantics: the cut line lands AT the target's old
-// position, shoving everything else around. So we pick mode based on the
-// direction of travel.
-export async function pasteTableCut() {
-  const cut = state.tableCut;
-  if (!cut) return false;
-  const cell = gridCellFrom(state.selected);
-  if (!cell) return false;
-  if (state.tableSelectionMode !== cut.kind) {
-    flash(`Select a ${cut.kind} first (Shift+Space / Ctrl+Space).`, { kind: "warning" });
-    return false;
-  }
-  const tableId = tableIdFor(cell);
-  if (tableId !== cut.tableId) {
-    flash("Can't move rows or columns across tables yet.", { kind: "warning" });
-    return false;
-  }
-  const grid = gridForElement(state.selected);
-  if (!grid) return false;
-  const targetIndex = cut.kind === "row"
-    ? tableRowIndexOf(cell)?.index
-    : grid.position.col;
-  if (targetIndex == null) return false;
-  if (targetIndex === cut.index) {
-    clearTableCut();
-    return false;
-  }
-  const mode = targetIndex > cut.index ? "after" : "before";
-  state.tableCut = null;
-  await runMoveTo(cut.kind, cut.cellId, targetIndex, mode);
-  return true;
 }

@@ -864,33 +864,8 @@ export function placeBox(box, el) {
     box.dataset.editing = state.editing ? "true" : "false";
     box.dataset.tableSelection = state.tableSelectionMode || "cell";
     placeTableHandles(el);
-    refreshCutBadge();
     if (state.hoveredTable) placeTableAddZones(state.hoveredTable);
   }
-}
-
-function refreshCutBadge() {
-  const cut = state.tableCut;
-  if (!cut) { delete dom.selectBox.dataset.cut; return; }
-  const cell = gridCellFrom(state.selected);
-  if (!cell || state.tableSelectionMode !== cut.kind) {
-    delete dom.selectBox.dataset.cut;
-    return;
-  }
-  const table = cell.closest("table");
-  const grid = gridForCell(cell);
-  if (!table || !grid || table.getAttribute("data-edit-id") !== cut.tableId) {
-    delete dom.selectBox.dataset.cut;
-    return;
-  }
-  const lineIndex = cut.kind === "row"
-    ? (() => {
-        const allRows = Array.from(table.querySelectorAll("tr"));
-        return allRows.indexOf(cell.closest("tr"));
-      })()
-    : grid.position.col;
-  if (lineIndex === cut.index) dom.selectBox.dataset.cut = "true";
-  else delete dom.selectBox.dataset.cut;
 }
 
 export function placeToolbar(el) {

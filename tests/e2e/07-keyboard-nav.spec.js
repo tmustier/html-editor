@@ -649,10 +649,13 @@ test.describe("keyboard navigation + adversarial flows", () => {
       await page.keyboard.press("Shift+Space");
       expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("row");
       await page.keyboard.press("Meta+X");
-      await expect(page.locator("#__edit_select")).toHaveAttribute("data-cut", "true");
-      // Move to the third (Eta) row and paste-as-move.
+      await expect(page.locator("#__edit_cut")).toBeVisible();
+      expect(await page.evaluate(() => window.__edit.cut()?.kind)).toBe("row");
+      // Move to the third (Eta) row and paste-as-move; cut outline stays on source.
       await selectCell(page, "Eta");
       await page.keyboard.press("Shift+Space");
+      await expect(page.locator("#__edit_cut")).toBeVisible();
+      expect(await page.evaluate(() => window.__edit.cut()?.kind)).toBe("row");
       await page.keyboard.press("Meta+V");
       await page.waitForFunction(() =>
         Array.from(document.querySelectorAll('table[data-edit-id="e2"] tr'))
@@ -665,6 +668,54 @@ test.describe("keyboard navigation + adversarial flows", () => {
         ["Eta", "Theta", "Iota"],
         ["Delta", "Epsilon", "Zeta"],
       ]);
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("Cmd+X then Cmd+Shift++ inserts a staged row before the selected row", async ({ page }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+      await selectCell(page, "Eta");
+      await page.keyboard.press("Shift+Space");
+      await page.keyboard.press("Meta+X");
+      await expect(page.locator("#__edit_cut")).toBeVisible();
+      // Select the first row and insert the staged third row before it.
+      await selectCell(page, "Alpha");
+      await page.keyboard.press("Meta+Shift+Equal");
+      await page.waitForFunction(() =>
+        Array.from(document.querySelectorAll('table[data-edit-id="e2"] tr'))
+          .map((tr) => tr.cells[0].textContent.trim())
+          .join(",") === "Eta,Alpha,Delta");
+      const rows = await page.locator('table[data-edit-id="e2"] tr').evaluateAll((trs) =>
+        trs.map((tr) => Array.from(tr.cells).map((td) => td.textContent.trim())));
+      expect(rows).toEqual([
+        ["Eta", "Theta", "Iota"],
+        ["Alpha", "Beta", "Gamma"],
+        ["Delta", "Epsilon", "Zeta"],
+      ]);
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+
+  test("Cmd+C cancels a staged cut so the next paste is normal clipboard paste", async ({ page, context }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    const editor = await startEditor("table-grid.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+      await selectCell(page, "Delta");
+      await page.keyboard.press("Shift+Space");
+      await page.keyboard.press("Meta+X");
+      await page.waitForFunction(() => window.__edit.cut()?.kind === "row");
+      await selectCell(page, "Alpha");
+      await page.keyboard.press("Meta+C");
+      await page.waitForFunction(() => window.__edit.cut() === null);
+      await expect(page.locator("#__edit_cut")).toBeHidden();
     } finally {
       await editor.cleanup();
     }
@@ -844,6 +895,7 @@ test.describe("keyboard navigation + adversarial flows", () => {
         Array.from(document.querySelectorAll('table[data-edit-id="e2"] tr'))
           .map((tr) => tr.cells[0].textContent.trim())
           .join(",") === "Alpha,Eta,Delta");
+      await waitForEditor(page);
       expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("row");
     } finally {
       await editor.cleanup();
@@ -860,9 +912,9 @@ test.describe("keyboard navigation + adversarial flows", () => {
         const mod = await import("/__editor/client/tabledrag.js");
         await mod.runMoveTo("column", id, 0, "before");
       }, { id });
-      await page.waitForFunction(() => !!window.__edit);
       await page.waitForFunction(() =>
         document.querySelector('table[data-edit-id="e2"] tr')?.cells[0]?.textContent.trim() === "Gamma");
+      await waitForEditor(page);
       expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("column");
     } finally {
       await editor.cleanup();
@@ -1227,7 +1279,47 @@ test.describe("keyboard navigation + adversarial flows", () => {
     }
   });
 
-  test("Cmd+X on a 2x2 range clears the cells (cut)", async ({ page, context }) => {
+  test("Cmd+X on a range stages the cut; Cmd+V moves and clears source in one undo", async ({ page, context }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    const editor = await startEditor("table-grid.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+      await selectCell(page, "Alpha");
+      await page.keyboard.press("Shift+ArrowRight"); // Alpha + Beta
+      await page.keyboard.press("Meta+x");
+      await expect(page.locator("#__edit_cut")).toBeVisible();
+      expect(await page.evaluate(() => window.__edit.cut()?.kind)).toBe("range");
+      // Source remains intact until paste commits the move.
+      expect(await readCellText(page, "e5")).toBe("Alpha");
+      expect(await readCellText(page, "e6")).toBe("Beta");
+
+      await selectCell(page, "Delta");
+      await page.keyboard.press("Meta+v");
+      await page.waitForFunction(() =>
+        document.querySelector('[data-edit-id="e5"]').textContent.trim() === ""
+        && document.querySelector('[data-edit-id="e9"]').textContent.trim() === "Alpha"
+        && window.__edit.cut() === null);
+      expect(await readCellText(page, "e5")).toBe("");
+      expect(await readCellText(page, "e6")).toBe("");
+      expect(await readCellText(page, "e9")).toBe("Alpha");
+      expect(await readCellText(page, "e10")).toBe("Beta");
+      expect(await readCellText(page, "e7")).toBe("Gamma");
+
+      // One undo restores both source and destination.
+      await page.keyboard.press("Meta+z");
+      await page.waitForFunction(() =>
+        document.querySelector('[data-edit-id="e5"]').textContent.trim() === "Alpha");
+      expect(await readCellText(page, "e5")).toBe("Alpha");
+      expect(await readCellText(page, "e6")).toBe("Beta");
+      expect(await readCellText(page, "e9")).toBe("Delta");
+      expect(await readCellText(page, "e10")).toBe("Epsilon");
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("staged range cut refuses clipped destinations without clearing source", async ({ page, context }) => {
     await context.grantPermissions(["clipboard-read", "clipboard-write"]);
     const editor = await startEditor("table-grid.html");
     try {
@@ -1235,21 +1327,18 @@ test.describe("keyboard navigation + adversarial flows", () => {
       await waitForEditor(page);
       await selectCell(page, "Alpha");
       await page.keyboard.press("Shift+ArrowRight");
-      await page.keyboard.press("Shift+ArrowDown");
+      await page.keyboard.press("Shift+ArrowDown"); // 2x2: Alpha/Beta + Delta/Epsilon
       await page.keyboard.press("Meta+x");
-      await page.waitForFunction(() => {
-        const cells = window.__edit.rangeCells().flat();
-        return cells.every((t) => t === "");
-      });
-      // The other two cells in row 1 + row 2 stay untouched.
-      expect(await readCellText(page, "e7")).toBe("Gamma");
-      expect(await readCellText(page, "e15")).toBe("Iota");
-      // Cmd+Z restores all four cells in one step.
-      await page.keyboard.press("Meta+z");
-      await page.waitForFunction(() =>
-        document.querySelector('[data-edit-id="e5"]').textContent.trim() === "Alpha");
+      await expect(page.locator("#__edit_cut")).toBeVisible();
+      await selectCell(page, "Iota");
+      await page.keyboard.press("Meta+v");
+      await expect(page.locator("#__edit_status")).toContainText(/doesn't fit/i);
+      expect(await page.evaluate(() => window.__edit.cut()?.kind)).toBe("range");
       expect(await readCellText(page, "e5")).toBe("Alpha");
+      expect(await readCellText(page, "e6")).toBe("Beta");
+      expect(await readCellText(page, "e9")).toBe("Delta");
       expect(await readCellText(page, "e10")).toBe("Epsilon");
+      expect(await readCellText(page, "e15")).toBe("Iota");
     } finally {
       await editor.cleanup();
     }
