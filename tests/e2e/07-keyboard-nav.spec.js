@@ -3,8 +3,14 @@ import { startEditor, waitForEditor } from "./helpers.js";
 
 test.describe("keyboard navigation + adversarial flows", () => {
   async function selectCell(page, text) {
-    const id = await page.locator(`td:has-text("${text}")`).first()
-      .getAttribute("data-edit-id");
+    // Prefer the exact-match locator so cells like "Eta" don't collide with
+    // substrings ("Beta"). Fall back to has-text when the visible text lives
+    // in a nested span (badge cells).
+    let locator = page.locator(`td:text-is("${text}")`).first();
+    if (await locator.count() === 0) {
+      locator = page.locator(`td:has-text("${text}")`).first();
+    }
+    const id = await locator.getAttribute("data-edit-id");
     await page.evaluate((id) => {
       window.__edit.select(document.querySelector(`[data-edit-id="${id}"]`));
     }, id);
@@ -551,6 +557,307 @@ test.describe("keyboard navigation + adversarial flows", () => {
       });
       expect(editing).toBe(true);
       expect(errors).toEqual([]);
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("+ zone on table's right edge appends a column", async ({ page }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+      await selectCell(page, "Epsilon");
+      // Hover over a cell so the "+" zones arm via proximity.
+      await page.locator('td:text-is("Epsilon")').hover();
+      await expect(page.locator("#__edit_table_add_col")).toHaveAttribute("data-visible", "true");
+      await page.locator("#__edit_table_add_col").click();
+      await page.waitForFunction(() =>
+        window.__edit && document.querySelector('table[data-edit-id="e2"] tr')?.cells.length === 4);
+      const rows = await page.locator('table[data-edit-id="e2"] tr').evaluateAll((trs) =>
+        trs.map((tr) => Array.from(tr.cells).map((td) => td.textContent.trim())));
+      expect(rows).toEqual([
+        ["Alpha", "Beta", "Gamma", ""],
+        ["Delta", "Epsilon", "Zeta", ""],
+        ["Eta", "Theta", "Iota", ""],
+      ]);
+      expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("column");
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("hovering an unselected table arms the + zones and click adds a column", async ({ page }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+      // Nothing selected. Hover into the second table's cell; zones should arm.
+      await page.locator('td:text-is("Status A")').hover();
+      await expect(page.locator("#__edit_table_add_col")).toHaveAttribute("data-visible", "true");
+      // Travel out of the cell and onto the column zone without first
+      // re-entering the table; the zone should stay armed.
+      await page.locator("#__edit_table_add_col").click();
+      await page.waitForFunction(() =>
+        document.querySelector('table[data-edit-id="e18"] tr')?.cells.length === 3);
+      const rows = await page.locator('table[data-edit-id="e18"] tr').evaluateAll((trs) =>
+        trs.map((tr) => Array.from(tr.cells).map((td) => td.textContent.trim())));
+      expect(rows[0][2]).toBe("");
+      expect(rows[1][2]).toBe("");
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("+ zone on table's bottom edge appends a row", async ({ page }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+      await selectCell(page, "Epsilon");
+      await page.locator('td:text-is("Epsilon")').hover();
+      await expect(page.locator("#__edit_table_add_row")).toHaveAttribute("data-visible", "true");
+      await page.locator("#__edit_table_add_row").click();
+      await page.waitForFunction(() =>
+        window.__edit && document.querySelectorAll('table[data-edit-id="e2"] tr').length === 4);
+      const rows = await page.locator('table[data-edit-id="e2"] tr').evaluateAll((trs) =>
+        trs.map((tr) => Array.from(tr.cells).map((td) => td.textContent.trim())));
+      expect(rows).toEqual([
+        ["Alpha", "Beta", "Gamma"],
+        ["Delta", "Epsilon", "Zeta"],
+        ["Eta", "Theta", "Iota"],
+        ["", "", ""],
+      ]);
+      expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("row");
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("Excel-style Cmd+X / Cmd+V on rows moves the row", async ({ page }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+      await selectCell(page, "Delta");
+      await page.keyboard.press("Shift+Space");
+      expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("row");
+      await page.keyboard.press("Meta+X");
+      await expect(page.locator("#__edit_select")).toHaveAttribute("data-cut", "true");
+      // Move to the third (Eta) row and paste-as-move.
+      await selectCell(page, "Eta");
+      await page.keyboard.press("Shift+Space");
+      await page.keyboard.press("Meta+V");
+      await page.waitForFunction(() =>
+        Array.from(document.querySelectorAll('table[data-edit-id="e2"] tr'))
+          .map((tr) => tr.cells[0].textContent.trim())
+          .join(",") === "Alpha,Eta,Delta");
+      const rows = await page.locator('table[data-edit-id="e2"] tr').evaluateAll((trs) =>
+        trs.map((tr) => Array.from(tr.cells).map((td) => td.textContent.trim())));
+      expect(rows).toEqual([
+        ["Alpha", "Beta", "Gamma"],
+        ["Eta", "Theta", "Iota"],
+        ["Delta", "Epsilon", "Zeta"],
+      ]);
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("Excel-style Cmd+X / Cmd+V on columns moves the column", async ({ page }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+      await selectCell(page, "Beta");
+      await page.keyboard.press("Control+Space");
+      expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("column");
+      await page.keyboard.press("Meta+X");
+      await selectCell(page, "Alpha");
+      await page.keyboard.press("Control+Space");
+      await page.keyboard.press("Meta+V");
+      await page.waitForFunction(() =>
+        document.querySelector('table[data-edit-id="e2"] tr')?.cells[0]?.textContent.trim() === "Beta");
+      const rows = await page.locator('table[data-edit-id="e2"] tr').evaluateAll((trs) =>
+        trs.map((tr) => Array.from(tr.cells).map((td) => td.textContent.trim())));
+      expect(rows).toEqual([
+        ["Beta", "Alpha", "Gamma"],
+        ["Epsilon", "Delta", "Zeta"],
+        ["Theta", "Eta", "Iota"],
+      ]);
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("Cmd+V across tables surfaces a warning instead of moving", async ({ page }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+      await selectCell(page, "Delta");
+      await page.keyboard.press("Shift+Space");
+      await page.keyboard.press("Meta+X");
+      await selectCell(page, "Status B");
+      await page.keyboard.press("Shift+Space");
+      await page.keyboard.press("Meta+V");
+      await expect(page.locator("#__edit_status")).toContainText(/across tables/i);
+      // Source table should still have Delta in its second row.
+      const rows = await page.locator('table[data-edit-id="e2"] tr').evaluateAll((trs) =>
+        trs.map((tr) => Array.from(tr.cells).map((td) => td.textContent.trim())));
+      expect(rows[1]).toEqual(["Delta", "Epsilon", "Zeta"]);
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("Ctrl+Shift+= inserts a row before the selected row", async ({ page }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+      await selectCell(page, "Epsilon");
+      await page.keyboard.press("Shift+Space");
+      await page.keyboard.press("Control+Shift+Equal");
+      await page.waitForFunction(() =>
+        window.__edit && document.querySelectorAll('table[data-edit-id="e2"] tr').length === 4);
+      const rows = await page.locator('table[data-edit-id="e2"] tr').evaluateAll((trs) =>
+        trs.map((tr) => Array.from(tr.cells).map((td) => td.textContent.trim())));
+      expect(rows).toEqual([
+        ["Alpha", "Beta", "Gamma"],
+        ["", "", ""],
+        ["Delta", "Epsilon", "Zeta"],
+        ["Eta", "Theta", "Iota"],
+      ]);
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("Ctrl+- deletes the selected column", async ({ page }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+      await selectCell(page, "Beta");
+      await page.keyboard.press("Control+Space");
+      await page.keyboard.press("Control+Minus");
+      await page.waitForFunction(() =>
+        window.__edit && document.querySelector('table[data-edit-id="e2"] tr')?.cells.length === 2);
+      const rows = await page.locator('table[data-edit-id="e2"] tr').evaluateAll((trs) =>
+        trs.map((tr) => Array.from(tr.cells).map((td) => td.textContent.trim())));
+      expect(rows).toEqual([
+        ["Alpha", "Gamma"],
+        ["Delta", "Zeta"],
+        ["Eta", "Iota"],
+      ]);
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("dragging the column handle reorders the column", async ({ page }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+
+      // Pick the middle column (Beta) and drag its top handle onto the
+      // Gamma column so it should land on the right.
+      await selectCell(page, "Beta");
+      const handle = page.locator("#__edit_table_col_handle");
+      const gammaCell = page.locator('td:text-is("Gamma")');
+      const start = await handle.boundingBox();
+      const target = await gammaCell.boundingBox();
+      await page.mouse.move(start.x + start.width / 2, start.y + start.height / 2);
+      await page.mouse.down();
+      // Move slightly off-handle to trigger the drag threshold.
+      await page.mouse.move(start.x + start.width / 2 + 6, start.y + start.height / 2 + 6);
+      await page.mouse.move(target.x + target.width - 6, target.y + target.height / 2);
+      await page.mouse.up();
+
+      await page.waitForFunction(() =>
+        document.querySelector('table[data-edit-id="e2"] tr')?.cells[2]?.textContent.trim() === "Beta");
+      const rows = await page.locator('table[data-edit-id="e2"] tr').evaluateAll((trs) =>
+        trs.map((tr) => Array.from(tr.cells).map((td) => td.textContent.trim())));
+      expect(rows).toEqual([
+        ["Alpha", "Gamma", "Beta"],
+        ["Delta", "Zeta", "Epsilon"],
+        ["Eta", "Iota", "Theta"],
+      ]);
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("dragging the row handle reorders the row", async ({ page }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+
+      await selectCell(page, "Alpha");
+      const handle = page.locator("#__edit_table_row_handle");
+      const etaCell = page.locator('td:text-is("Eta")');
+      const start = await handle.boundingBox();
+      const target = await etaCell.boundingBox();
+      await page.mouse.move(start.x + start.width / 2, start.y + start.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(start.x + start.width / 2 + 6, start.y + start.height / 2 + 6);
+      await page.mouse.move(target.x + target.width / 2, target.y + target.height - 4);
+      await page.mouse.up();
+
+      await page.waitForFunction(() =>
+        Array.from(document.querySelectorAll('table[data-edit-id="e2"] tr'))
+          .map((tr) => tr.cells[0].textContent.trim())
+          .join(",") === "Delta,Eta,Alpha");
+      const rows = await page.locator('table[data-edit-id="e2"] tr').evaluateAll((trs) =>
+        trs.map((tr) => Array.from(tr.cells).map((td) => td.textContent.trim())));
+      expect(rows).toEqual([
+        ["Delta", "Epsilon", "Zeta"],
+        ["Eta", "Theta", "Iota"],
+        ["Alpha", "Beta", "Gamma"],
+      ]);
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("row-move-to via API reorders rows and restores selection", async ({ page }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+      const id = await page.locator('td:text-is("Delta")').getAttribute("data-edit-id");
+      // Drive the new move-to action directly via the public client API.
+      await page.evaluate(async ({ id }) => {
+        const mod = await import("/__editor/client/tabledrag.js");
+        await mod.runMoveTo("row", id, 2, "after");
+      }, { id });
+      await page.waitForFunction(() =>
+        Array.from(document.querySelectorAll('table[data-edit-id="e2"] tr'))
+          .map((tr) => tr.cells[0].textContent.trim())
+          .join(",") === "Alpha,Eta,Delta");
+      expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("row");
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("col-move-to via API reorders columns and restores column selection", async ({ page }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+      const id = await page.locator('td:text-is("Gamma")').getAttribute("data-edit-id");
+      await page.evaluate(async ({ id }) => {
+        const mod = await import("/__editor/client/tabledrag.js");
+        await mod.runMoveTo("column", id, 0, "before");
+      }, { id });
+      await page.waitForFunction(() => !!window.__edit);
+      await page.waitForFunction(() =>
+        document.querySelector('table[data-edit-id="e2"] tr')?.cells[0]?.textContent.trim() === "Gamma");
+      expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("column");
     } finally {
       await editor.cleanup();
     }

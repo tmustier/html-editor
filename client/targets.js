@@ -258,6 +258,102 @@ export function tableSelectionCells(el, mode) {
   return [];
 }
 
+export function gridForElement(el) {
+  const cell = gridCellFrom(el);
+  return cell && gridForCell(cell);
+}
+
+// Returns the table this cell lives in along with the index of the row that
+// contains the cell within _all_ rows of the table (including thead/tfoot).
+export function tableRowIndexOf(cell) {
+  const table = cell && cell.closest && cell.closest("table");
+  if (!table) return null;
+  const allRows = Array.from(table.querySelectorAll("tr"));
+  const row = cell.closest("tr");
+  const index = allRows.indexOf(row);
+  if (index < 0) return null;
+  return { table, row, index, total: allRows.length };
+}
+
+// Lists every line (row or column) of the table containing `cell` as a set of
+// {index, rect} entries in document coordinates. Used for drag-reorder drop
+// indicators and "+" zone placement.
+export function tableLineRects(cell, axis) {
+  const grid = cell && gridForCell(cell);
+  if (!grid) return null;
+  const lines = [];
+  if (axis === "row") {
+    grid.matrix.forEach((row, rowIdx) => {
+      const cells = uniqueCells(row || []);
+      const rect = unionDocumentRect(cells);
+      if (rect) lines.push({ index: rowIdx, rect });
+    });
+  } else if (axis === "column") {
+    const width = grid.matrix[0] ? grid.matrix[0].length : 0;
+    for (let c = 0; c < width; c += 1) {
+      const cells = uniqueCells(grid.matrix.map((row) => row && row[c]).filter(Boolean));
+      const rect = unionDocumentRect(cells);
+      if (rect) lines.push({ index: c, rect });
+    }
+  }
+  const tableRect = grid.table ? rectOf(grid.table) : null;
+  return { lines, tableRect, table: grid.table };
+}
+
+// Given a viewport-space pointer, find the row/column drop slot relative to
+// the table the source cell belongs to. Returns { axis, targetIndex, mode,
+// rect, sourceIndex } or null.
+export function dropSlotFor(sourceCell, axis, clientX, clientY) {
+  const info = tableLineRects(sourceCell, axis);
+  if (!info || !info.lines.length) return null;
+  const x = clientX + window.scrollX;
+  const y = clientY + window.scrollY;
+  const sourceIndex = axis === "row"
+    ? tableRowIndexOf(sourceCell)?.index
+    : gridForCell(sourceCell)?.position.col;
+  let best = null;
+  for (const { index, rect } of info.lines) {
+    if (axis === "row") {
+      const mid = rect.top + rect.height / 2;
+      const candidate = y < mid
+        ? { axis, targetIndex: index, mode: "before", rect, sourceIndex }
+        : { axis, targetIndex: index, mode: "after", rect, sourceIndex };
+      const distance = Math.abs(y - mid);
+      if (!best || distance < best._d) best = { ...candidate, _d: distance };
+    } else {
+      const mid = rect.left + rect.width / 2;
+      const candidate = x < mid
+        ? { axis, targetIndex: index, mode: "before", rect, sourceIndex }
+        : { axis, targetIndex: index, mode: "after", rect, sourceIndex };
+      const distance = Math.abs(x - mid);
+      if (!best || distance < best._d) best = { ...candidate, _d: distance };
+    }
+  }
+  if (!best) return null;
+  // Detect drops that would be no-ops (same effective position).
+  if (best.sourceIndex != null) {
+    let newIndex;
+    if (best.targetIndex < best.sourceIndex) {
+      newIndex = best.mode === "before" ? best.targetIndex : best.targetIndex + 1;
+    } else if (best.targetIndex > best.sourceIndex) {
+      newIndex = best.mode === "before" ? best.targetIndex - 1 : best.targetIndex;
+    } else {
+      newIndex = best.sourceIndex;
+    }
+    best.noop = newIndex === best.sourceIndex;
+  }
+  delete best._d;
+  return best;
+}
+
+// Bounding-rect helper for the table around `el`, used by edge "+" zones.
+export function tableRectFor(el) {
+  const cell = gridCellFrom(el);
+  const table = cell && cell.closest ? cell.closest("table") : null;
+  if (!table) return null;
+  return { rect: rectOf(table), table, cell };
+}
+
 function unionDocumentRect(elements) {
   const rects = elements.filter(Boolean).map(rectOf);
   if (!rects.length) return null;
@@ -488,6 +584,52 @@ function canDuplicateElement(el, target) {
   return true;
 }
 
+function hideTableAddZones() {
+  if (!dom.addRowZone || !dom.addColZone) return;
+  dom.addRowZone.dataset.visible = "false";
+  dom.addColZone.dataset.visible = "false";
+}
+
+export function placeTableAddZones(table) {
+  if (!dom.addRowZone || !dom.addColZone) return;
+  if (!table || state.editing || state.dragging) {
+    hideTableAddZones();
+    return;
+  }
+  const r = rectOf(table);
+  const gap = 6;
+  const thickness = 16;
+  const corner = 16; // leave the SE corner alone for resize/move grip
+  // Bottom "+" row zone.
+  const rowLeft = r.left;
+  const rowWidth = Math.max(0, r.width - corner);
+  if (rowWidth > 24) {
+    dom.addRowZone.style.left = rowLeft + "px";
+    dom.addRowZone.style.top = (r.top + r.height + gap) + "px";
+    dom.addRowZone.style.width = rowWidth + "px";
+    dom.addRowZone.style.height = thickness + "px";
+    dom.addRowZone.dataset.visible = "true";
+  } else {
+    dom.addRowZone.dataset.visible = "false";
+  }
+  // Right "+" column zone.
+  const colTop = r.top;
+  const colHeight = Math.max(0, r.height - corner);
+  if (colHeight > 24) {
+    dom.addColZone.style.left = (r.left + r.width + gap) + "px";
+    dom.addColZone.style.top = colTop + "px";
+    dom.addColZone.style.width = thickness + "px";
+    dom.addColZone.style.height = colHeight + "px";
+    dom.addColZone.dataset.visible = "true";
+  } else {
+    dom.addColZone.dataset.visible = "false";
+  }
+}
+
+export function refreshTableAddZones() {
+  placeTableAddZones(state.hoveredTable);
+}
+
 function placeTableHandles(el) {
   const cell = gridCellFrom(el);
   if (!cell || state.editing || state.dragging) {
@@ -543,7 +685,33 @@ export function placeBox(box, el) {
     box.dataset.editing = state.editing ? "true" : "false";
     box.dataset.tableSelection = state.tableSelectionMode || "cell";
     placeTableHandles(el);
+    refreshCutBadge();
+    if (state.hoveredTable) placeTableAddZones(state.hoveredTable);
   }
+}
+
+function refreshCutBadge() {
+  const cut = state.tableCut;
+  if (!cut) { delete dom.selectBox.dataset.cut; return; }
+  const cell = gridCellFrom(state.selected);
+  if (!cell || state.tableSelectionMode !== cut.kind) {
+    delete dom.selectBox.dataset.cut;
+    return;
+  }
+  const table = cell.closest("table");
+  const grid = gridForCell(cell);
+  if (!table || !grid || table.getAttribute("data-edit-id") !== cut.tableId) {
+    delete dom.selectBox.dataset.cut;
+    return;
+  }
+  const lineIndex = cut.kind === "row"
+    ? (() => {
+        const allRows = Array.from(table.querySelectorAll("tr"));
+        return allRows.indexOf(cell.closest("tr"));
+      })()
+    : grid.position.col;
+  if (lineIndex === cut.index) dom.selectBox.dataset.cut = "true";
+  else delete dom.selectBox.dataset.cut;
 }
 
 export function placeToolbar(el) {
@@ -639,6 +807,8 @@ export function selectElementInternal(el, tableSelectionMode = null) {
   dom.commentBox.hidden = true;
   dom.tableMenu.hidden = true;
   if (!state.svgEditing) dom.svgEditor.hidden = true;
+  // "+" append zones are proximity-driven (see events.js), so don't pin them
+  // to the selection here — let mousemove decide whether they belong on screen.
 }
 
 export function navigate(direction) {

@@ -285,11 +285,22 @@ def make_handler(
         def _table_operation(self, payload):
             cell_id = (payload or {}).get("cell_id")
             action = (payload or {}).get("action")
+            target_index_raw = (payload or {}).get("target_index")
+            mode = (payload or {}).get("mode") or "before"
             if not cell_id or not action:
                 self._send_json(400, {"error": "expected cell_id and action"})
                 return
+            target_index = None
+            if target_index_raw is not None:
+                try:
+                    target_index = int(target_index_raw)
+                except (TypeError, ValueError):
+                    self._send_json(400, {"error": "target_index must be an integer"})
+                    return
             soup = document.load_soup(html_path)
-            ok, result = document.table_operation(soup, str(cell_id), str(action))
+            ok, result = document.table_operation(
+                soup, str(cell_id), str(action),
+                target_index=target_index, mode=str(mode))
             if not ok:
                 self._send_result(ok, result)
                 return

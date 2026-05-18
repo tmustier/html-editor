@@ -46,6 +46,78 @@
   background: rgba(124, 58, 237, 0.34);
   border-color: #7c3aed;
 }
+html.__edit_dragging-line #__edit_table_row_handle,
+html.__edit_dragging-line #__edit_table_col_handle {
+  cursor: grabbing !important;
+}
+
+/* Notion/Obsidian-style append zones on the table's right + bottom edges. */
+#__edit_table_add_row,
+#__edit_table_add_col {
+  position: absolute;
+  z-index: 2147483646;
+  display: none;
+  pointer-events: auto;
+  background: rgba(37, 99, 235, 0.04);
+  border: 1px dashed rgba(37, 99, 235, 0.0);
+  border-radius: 6px;
+  cursor: pointer;
+  color: rgba(37, 99, 235, 0.85);
+  font: 600 16px/1 system-ui, -apple-system, "Segoe UI", sans-serif;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+#__edit_table_add_row[data-visible="true"],
+#__edit_table_add_col[data-visible="true"] {
+  display: flex;
+}
+#__edit_table_add_row::before,
+#__edit_table_add_col::before {
+  content: "+";
+  opacity: 0.35;
+  transition: opacity 120ms ease;
+}
+#__edit_table_add_row:hover,
+#__edit_table_add_col:hover {
+  background: rgba(37, 99, 235, 0.18);
+  border-color: rgba(37, 99, 235, 0.55);
+}
+#__edit_table_add_row:hover::before,
+#__edit_table_add_col:hover::before {
+  opacity: 1;
+}
+
+/* Drop indicator while drag-reordering a row or column. */
+#__edit_table_drop {
+  position: absolute;
+  background: #7c3aed;
+  border-radius: 2px;
+  z-index: 2147483645;
+  pointer-events: none;
+  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.25);
+}
+#__edit_table_drop[data-axis="row"] { height: 3px; }
+#__edit_table_drop[data-axis="column"] { width: 3px; }
+
+/* Marching-ants outline for Cmd+X cut row/column. */
+@keyframes __edit_marching_ants {
+  to { background-position: 16px 0, -16px 0, 0 16px, 0 -16px; }
+}
+#__edit_select[data-cut="true"] {
+  background-image:
+    linear-gradient(90deg, #7c3aed 50%, transparent 50%),
+    linear-gradient(90deg, #7c3aed 50%, transparent 50%),
+    linear-gradient(0deg,  #7c3aed 50%, transparent 50%),
+    linear-gradient(0deg,  #7c3aed 50%, transparent 50%);
+  background-repeat: repeat-x, repeat-x, repeat-y, repeat-y;
+  background-size: 8px 2px, 8px 2px, 2px 8px, 2px 8px;
+  background-position: 0 0, 0 100%, 0 0, 100% 0;
+  animation: __edit_marching_ants 0.6s linear infinite;
+  border-style: dashed;
+}
 
 /* The selectBox itself stays pointer-events:none so the user can keep
    clicking/typing inside the selected element. Thin child overlays on the

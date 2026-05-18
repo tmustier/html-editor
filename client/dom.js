@@ -18,8 +18,11 @@ export function initDom() {
   root.id = "__edit_root";
   root.innerHTML = `
     <div id="__edit_hover"></div>
-    <div id="__edit_table_row_handle" title="Select row (Shift+Space)"></div>
-    <div id="__edit_table_col_handle" title="Select column (Ctrl+Space or Option+Space)"></div>
+    <div id="__edit_table_row_handle" title="Click to select row (Shift+Space) · Drag to reorder"></div>
+    <div id="__edit_table_col_handle" title="Click to select column (Ctrl+Space or Option+Space) · Drag to reorder"></div>
+    <div id="__edit_table_add_row" title="Click to add a new row at the bottom"></div>
+    <div id="__edit_table_add_col" title="Click to add a new column on the right"></div>
+    <div id="__edit_table_drop" hidden></div>
     <div id="__edit_select">
       <div class="__edit_border_drag bd-n" data-border-drag="n" title="Drag border to move"></div>
       <div class="__edit_border_drag bd-e" data-border-drag="e" title="Drag border to move"></div>
@@ -93,7 +96,11 @@ export function initDom() {
           <tr><td><kbd>Arrow keys</kbd></td><td>Move between table/grid cells when a cell is selected</td></tr>
           <tr><td><kbd>Cmd</kbd><kbd>Arrow keys</kbd></td><td>Jump to the edge of the current table row/column</td></tr>
           <tr><td><kbd>Shift</kbd><kbd>Space</kbd> / <kbd>Ctrl</kbd><kbd>Space</kbd></td><td>Select the current table row / column (Option+Space also selects column if macOS owns Ctrl+Space)</td></tr>
-          <tr><td><kbd>Row/column handles</kbd></td><td>Click left/top table handles to select a row or column</td></tr>
+          <tr><td><kbd>Row/column handles</kbd></td><td>Click to select a row or column; drag to reorder</td></tr>
+          <tr><td><kbd>+</kbd> edge zones</td><td>Hover the table's right or bottom edge to append a column or row</td></tr>
+          <tr><td><kbd>Cmd</kbd><kbd>X</kbd> → <kbd>Cmd</kbd><kbd>V</kbd></td><td>Cut a selected row/column and paste-as-move on another row/column (same table)</td></tr>
+          <tr><td><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>=</kbd></td><td>Insert a row/column before the current selection</td></tr>
+          <tr><td><kbd>Ctrl</kbd><kbd>-</kbd></td><td>Delete the selected row/column</td></tr>
           <tr><td><kbd>Table</kbd> button</td><td>Insert, delete, or reorder rows/columns for simple rectangular tables</td></tr>
           <tr><td><kbd>Tab</kbd> / <kbd>Shift</kbd><kbd>Tab</kbd></td><td>Next / previous table cell; saves the current cell first while editing</td></tr>
           <tr><td><kbd>Option</kbd><kbd>Left</kbd> / <kbd>Right</kbd></td><td>Previous / next sibling</td></tr>
@@ -133,6 +140,9 @@ export function initDom() {
     hoverBox:    root.querySelector("#__edit_hover"),
     rowHandle:   root.querySelector("#__edit_table_row_handle"),
     colHandle:   root.querySelector("#__edit_table_col_handle"),
+    addRowZone:  root.querySelector("#__edit_table_add_row"),
+    addColZone:  root.querySelector("#__edit_table_add_col"),
+    tableDrop:   root.querySelector("#__edit_table_drop"),
     selectBox:   root.querySelector("#__edit_select"),
     dropLine:    root.querySelector("#__edit_drop"),
     toolbar,

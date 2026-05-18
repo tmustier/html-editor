@@ -9,5 +9,9 @@ export const state = {
   tableSelectionMode: null,  // null, "row", or "column" when a table range is selected
   editing: false,            // true while an inline HTML or SVG edit is active
   svgEditing: null,          // SVG edit session object, or null
-  dragging: null,            // drag session object (reorder / svg / resize) or null
+  dragging: null,            // drag session object (reorder / svg / resize / table-line) or null
+  tableCut: null,            // pending Excel-style row/column cut: { kind, tableId, index } or null
+  hoveredTable: null,        // table currently under cursor for "+" append zones
+  mouseX: -1,                // last known viewport mouse position ("+" zone proximity)
+  mouseY: -1,
 };

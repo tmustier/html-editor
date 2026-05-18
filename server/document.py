@@ -308,10 +308,12 @@ def update_text_many(
 
 TABLE_ACTIONS = {
     "row-insert-before", "row-insert-after", "row-delete",
-    "row-move-up", "row-move-down",
+    "row-move-up", "row-move-down", "row-move-to",
     "col-insert-before", "col-insert-after", "col-delete",
-    "col-move-left", "col-move-right",
+    "col-move-left", "col-move-right", "col-move-to",
 }
+
+TABLE_ACTIONS_NEED_TARGET = {"row-move-to", "col-move-to"}
 
 ROW_GROUP_TAGS = {"thead", "tbody", "tfoot"}
 
@@ -428,10 +430,20 @@ def table_operation(
     soup: BeautifulSoup,
     cell_id: str,
     action: str,
+    *,
+    target_index: Optional[int] = None,
+    mode: str = "before",
 ) -> tuple[bool, dict]:
     if action not in TABLE_ACTIONS:
         return False, {"status": 400, "error":
             "unknown table action"}
+    if action in TABLE_ACTIONS_NEED_TARGET:
+        if target_index is None:
+            return False, {"status": 400, "error":
+                f"{action} requires target_index"}
+        if mode not in {"before", "after"}:
+            return False, {"status": 400, "error":
+                "mode must be 'before' or 'after'"}
     ok, geometry = _table_geometry(soup, cell_id)
     if not ok:
         return ok, geometry
@@ -518,6 +530,54 @@ def table_operation(
                 return False, {"status": 400, "error": "column is already last"}
             for cells in grid:
                 cells[col_index + 1].insert_after(cells[col_index].extract())
+        selection = cell
+
+    elif action == "row-move-to":
+        if not (0 <= target_index < len(rows)):
+            return False, {"status": 400, "error": "target_index out of range"}
+        target_row = rows[target_index]
+        if target_row is row:
+            return False, {"status": 400, "error":
+                "row is already at that position"}
+        if target_row.parent is not row.parent:
+            return False, {"status": 400, "error":
+                "can't move rows across thead/tbody/tfoot boundaries"}
+        # Reject no-op moves (e.g. dropping just below current row with before).
+        if target_index < row_index:
+            new_index = target_index if mode == "before" else target_index + 1
+        else:
+            new_index = target_index - 1 if mode == "before" else target_index
+        if new_index == row_index:
+            return False, {"status": 400, "error":
+                "row is already at that position"}
+        moved = row.extract()
+        if mode == "before":
+            target_row.insert_before(moved)
+        else:
+            target_row.insert_after(moved)
+        selection = cell
+
+    elif action == "col-move-to":
+        if not (0 <= target_index < width):
+            return False, {"status": 400, "error": "target_index out of range"}
+        if target_index == col_index:
+            return False, {"status": 400, "error":
+                "column is already at that position"}
+        if target_index < col_index:
+            new_index = target_index if mode == "before" else target_index + 1
+        else:
+            new_index = target_index - 1 if mode == "before" else target_index
+        if new_index == col_index:
+            return False, {"status": 400, "error":
+                "column is already at that position"}
+        for cells in grid:
+            source_cell = cells[col_index]
+            target_cell = cells[target_index]
+            moved_cell = source_cell.extract()
+            if mode == "before":
+                target_cell.insert_before(moved_cell)
+            else:
+                target_cell.insert_after(moved_cell)
         selection = cell
 
     selection_id = selection.get("data-edit-id") if selection else None

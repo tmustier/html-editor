@@ -16,13 +16,22 @@ import {
   navigate,
   navigateGrid,
   placeBox,
+  placeTableAddZones,
   placeToolbar,
+  refreshTableAddZones,
   selectElementInternal,
   selectTableDimension,
   tableEdgeSelectionModeFromEvent,
   targetFor,
   toggleHelp,
 } from "./targets.js";
+import {
+  beginTableLineDrag,
+  cancelTableLineDrag,
+  clearTableCut,
+  markTableCut,
+  pasteTableCut,
+} from "./tabledrag.js";
 
 export function selectElement(el, tableSelectionMode = null) {
   selectElementInternal(el, tableSelectionMode);
@@ -32,6 +41,8 @@ export function deselect() {
   if (state.svgEditing) finishSvgLabelEdit(false);
   state.selected = null;
   state.tableSelectionMode = null;
+  state.tableCut = null;
+  if (dom.selectBox) delete dom.selectBox.dataset.cut;
   dom.selectBox.style.display = "none";
   dom.rowHandle.style.display = "none";
   dom.colHandle.style.display = "none";
@@ -39,6 +50,113 @@ export function deselect() {
   dom.commentBox.hidden = true;
   dom.tableMenu.hidden = true;
   dom.svgEditor.hidden = true;
+  if (dom.addRowZone) dom.addRowZone.dataset.visible = "false";
+  if (dom.addColZone) dom.addColZone.dataset.visible = "false";
+  if (dom.tableDrop) dom.tableDrop.hidden = true;
+  state.hoveredTable = null;
+}
+
+// The "+" zones are proximity-gated: they show when the cursor is close to a
+// table (over a cell or within a small margin of the table's bounds). That
+// keeps them out of the way of nearby content like a paragraph right under
+// the table while still giving the user a generous hit area.
+const ADD_ZONE_PROXIMITY = 24; // px
+
+function tableNearMouse() {
+  if (state.mouseX < 0) return null;
+  // Candidate tables to test against the cursor:
+  //   1. table directly under the cursor (covers fresh hover)
+  //   2. the previously hovered table (covers traveling out of cells into
+  //      the "+" zones without the zone vanishing mid-flight)
+  //   3. any currently-selected table (lets keyboard-driven selections keep
+  //      the zones armed when the cursor is still nearby)
+  const candidates = new Set();
+  const directCell = document.elementFromPoint(state.mouseX, state.mouseY);
+  const direct = directCell && directCell.closest && directCell.closest("table");
+  if (direct) candidates.add(direct);
+  if (state.hoveredTable && document.contains(state.hoveredTable)) {
+    candidates.add(state.hoveredTable);
+  }
+  const selectedCell = gridCellFrom(state.selected);
+  const selectedTable = selectedCell ? selectedCell.closest("table") : null;
+  if (selectedTable) candidates.add(selectedTable);
+  for (const table of candidates) {
+    const r = table.getBoundingClientRect();
+    const m = ADD_ZONE_PROXIMITY;
+    // The "+" zones sit ~6–12px beyond the table edges; allow a generous
+    // outer margin so the cursor traveling onto the zone keeps it armed.
+    if (state.mouseX >= r.left - m && state.mouseX <= r.right + m + 24 /* col-zone tail */
+        && state.mouseY >= r.top - m && state.mouseY <= r.bottom + m + 24 /* row-zone tail */) {
+      return table;
+    }
+  }
+  return null;
+}
+
+function updateAddZonesFromHover() {
+  const table = tableNearMouse();
+  if (table) {
+    state.hoveredTable = table;
+    placeTableAddZones(table);
+  } else {
+    state.hoveredTable = null;
+    placeTableAddZones(null);
+  }
+}
+
+function tableForAppend() {
+  return state.hoveredTable
+    || (state.selected && (gridCellFrom(state.selected)?.closest("table")))
+    || null;
+}
+
+function lastTableCell(table, axis) {
+  if (!table) return null;
+  const rows = Array.from(table.querySelectorAll("tr"));
+  if (!rows.length) return null;
+  if (axis === "row") {
+    // Anchor on any cell in the LAST row so row-insert-after appends.
+    const last = rows[rows.length - 1];
+    return last.querySelector("td, th");
+  }
+  // Anchor on the LAST cell of the FIRST row for col-insert-after.
+  const cells = Array.from(rows[0].querySelectorAll("td, th"));
+  return cells.length ? cells[cells.length - 1] : null;
+}
+
+async function appendTableLine(axis) {
+  const table = tableForAppend();
+  const cell = lastTableCell(table, axis);
+  if (!cell) {
+    flash("Hover over a table to add rows or columns.", { kind: "warning" });
+    return;
+  }
+  const action = axis === "row" ? "row-insert-after" : "col-insert-after";
+  try {
+    const result = await api.tableOperation(cell.getAttribute("data-edit-id"), action);
+    if (result.selection_id) {
+      sessionStorage.setItem("__edit_restore_selection", result.selection_id);
+      sessionStorage.setItem("__edit_restore_table_mode", axis);
+    }
+    flash(axis === "row" ? "Row added." : "Column added.",
+      { kind: "success", timeout: 1200 });
+    reloadAfterMutation({ delay: 200 });
+  } catch (err) {
+    flash("Add failed: " + err.message, { kind: "error", timeout: 3000 });
+  }
+}
+
+function insertOrDeleteLine(action) {
+  const cell = gridCellFrom(state.selected);
+  const axis = state.tableSelectionMode;
+  if (!cell || !axis) {
+    flash("Select a row or column first (Shift+Space / Ctrl+Space).", { kind: "warning" });
+    return;
+  }
+  const op = axis === "row"
+    ? (action === "insert" ? "row-insert-before" : "row-delete")
+    : (action === "insert" ? "col-insert-before" : "col-delete");
+  void performTableOperation(op);
 }
 
 function placeTableMenu() {
@@ -373,6 +491,7 @@ export function initEvents() {
   // --- clipboard ----------------------------------------------------------
   document.addEventListener("copy", (e) => {
     if (!state.selected || state.editing || isNativeClipboardTarget(e.target)) return;
+    if (state.tableSelectionMode) return; // row/column selection keeps clipboard scoped to cut
     if (!e.clipboardData) return;
     e.preventDefault();
     e.clipboardData.setData("text/plain", selectedPlainText());
@@ -382,6 +501,12 @@ export function initEvents() {
 
   document.addEventListener("paste", (e) => {
     if (!state.selected || state.editing || isNativeClipboardTarget(e.target)) return;
+    if (state.tableSelectionMode) {
+      // Row/column selection owns Cmd+V (cut-paste move). Never let the
+      // generic value-paste path race with it.
+      e.preventDefault();
+      return;
+    }
     const text = e.clipboardData && e.clipboardData.getData("text/plain");
     const html = e.clipboardData && e.clipboardData.getData("text/html");
     if (typeof text !== "string" && typeof html !== "string") return;
@@ -391,25 +516,40 @@ export function initEvents() {
 
   // --- mouse tracking -----------------------------------------------------
   document.addEventListener("mousemove", (e) => {
+    // Always remember mouse pos so the "+" proximity check stays current.
+    state.mouseX = e.clientX;
+    state.mouseY = e.clientY;
     if (state.editing || state.dragging) return;
     const t = e.target;
+    // Keep "+" zones reactive even when the cursor is over them.
+    if (t === dom.addRowZone || t === dom.addColZone
+        || t === dom.rowHandle || t === dom.colHandle) {
+      updateAddZonesFromHover();
+      return;
+    }
     if (isOverlay(t)) {
       dom.hoverBox.style.display = "none";
       state.hovered = null;
+      updateAddZonesFromHover();
       return;
     }
     const el = editableFrom(t);
     if (!el) {
       dom.hoverBox.style.display = "none";
       state.hovered = null;
+      updateAddZonesFromHover();
       return;
     }
     state.hovered = el;
     placeBox(dom.hoverBox, el);
+    updateAddZonesFromHover();
   }, true);
 
   document.addEventListener("mouseleave", () => {
     dom.hoverBox.style.display = "none";
+    state.mouseX = -1;
+    state.mouseY = -1;
+    updateAddZonesFromHover();
   });
 
   // Capture-phase click selects (and edits text-editables in one go).
@@ -477,9 +617,13 @@ export function initEvents() {
             || (t.getAttribute && t.getAttribute("contenteditable") === "true"));
 
     if (e.key === "Escape") {
+      if (state.dragging && state.dragging.mode === "table-line") {
+        e.preventDefault(); cancelTableLineDrag(); return;
+      }
       if (state.dragging)  { e.preventDefault(); cancelDrag(); return; }
       if (state.svgEditing){ e.preventDefault(); finishSvgLabelEdit(false); return; }
       if (state.editing)   return; // edit handler owns its own cancel
+      if (state.tableCut) { e.preventDefault(); clearTableCut(); flash("Cut cleared.", { kind: "info", timeout: 800 }); return; }
       if (!dom.commentBox.hidden) { e.preventDefault(); dom.commentBox.hidden = true; return; }
       if (!dom.tableMenu.hidden)  { e.preventDefault(); dom.tableMenu.hidden = true; return; }
       if (!dom.helpOverlay.hidden){ e.preventDefault(); toggleHelp(false); return; }
@@ -507,6 +651,27 @@ export function initEvents() {
       return;
     }
 
+    // Excel-style row/column cut on Cmd/Ctrl+X.
+    const cutKey = (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && key === "x";
+    if (cutKey && state.tableSelectionMode && state.selected
+        && !inEditableField && !state.editing) {
+      e.preventDefault();
+      e.stopPropagation();
+      markTableCut(state.tableSelectionMode);
+      return;
+    }
+
+    // Excel-style row/column paste-as-move if a cut is pending and the user
+    // has selected another row/column.
+    if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && key === "v"
+        && state.tableCut && state.tableSelectionMode && state.selected
+        && !inEditableField && !state.editing) {
+      e.preventDefault();
+      e.stopPropagation();
+      void pasteTableCut();
+      return;
+    }
+
     const isClipboardKey = (e.metaKey || e.ctrlKey) && !e.altKey
       && (key === "c" || key === "v");
     if (isClipboardKey && state.selected && !inEditableField && !state.editing) {
@@ -522,6 +687,24 @@ export function initEvents() {
       e.preventDefault();
       performHistory(key === "y" || e.shiftKey ? "redo" : "undo");
       return;
+    }
+
+    // Excel-style row/column structure shortcuts:
+    //   Ctrl+Shift+= (the "+" key) inserts before the selection.
+    //   Ctrl+- deletes the selected row/column.
+    //   Cmd+Shift+= / Cmd+- as Mac Excel fallbacks.
+    const isPlusInsert = (e.ctrlKey || e.metaKey) && !e.altKey && e.shiftKey
+      && (e.key === "+" || e.key === "=" || e.code === "Equal");
+    const isMinusDelete = (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey
+      && (e.key === "-" || e.key === "_" || e.code === "Minus");
+    if ((isPlusInsert || isMinusDelete) && !inEditableField && !state.editing) {
+      if (state.tableSelectionMode && state.selected) {
+        e.preventDefault();
+        e.stopPropagation();
+        insertOrDeleteLine(isPlusInsert ? "insert" : "delete");
+        return;
+      }
+      // Otherwise let the browser handle Cmd+/- zoom etc.
     }
 
     if (inEditableField || state.editing) return;
@@ -577,16 +760,65 @@ export function initEvents() {
   // --- toolbar / popovers / drag handle / resize handles ------------------
   dom.dragBtn.addEventListener("mousedown", beginDrag);
 
-  dom.rowHandle.addEventListener("click", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    selectTableDimension("row");
-  });
-  dom.colHandle.addEventListener("click", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    selectTableDimension("column");
-  });
+  // Row/column handles: mousedown begins a drag, mouseup with no drag is a
+  // plain click that selects. We track distance from mousedown to decide.
+  function installHandleDrag(handleEl, axis) {
+    handleEl.addEventListener("mousedown", (e) => {
+      if (state.editing || state.dragging) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (!gridCellFrom(state.selected)) {
+        // Best-effort: try to seed the selection from the handle's anchor cell
+        // if the user clicked the handle while nothing was selected.
+        return;
+      }
+      const startX = e.clientX;
+      const startY = e.clientY;
+      let dragged = false;
+      const onMove = (ev) => {
+        if (dragged) return;
+        const dx = Math.abs(ev.clientX - startX);
+        const dy = Math.abs(ev.clientY - startY);
+        if (dx + dy > 4) {
+          dragged = true;
+          document.removeEventListener("mousemove", onMove, true);
+          document.removeEventListener("mouseup", onUp, true);
+          beginTableLineDrag(axis, ev);
+        }
+      };
+      const onUp = (ev) => {
+        document.removeEventListener("mousemove", onMove, true);
+        document.removeEventListener("mouseup", onUp, true);
+        if (dragged) return;
+        // Plain click: toggle selection of that dimension.
+        ev.preventDefault();
+        ev.stopPropagation();
+        selectTableDimension(axis);
+      };
+      document.addEventListener("mousemove", onMove, true);
+      document.addEventListener("mouseup", onUp, true);
+    });
+  }
+  installHandleDrag(dom.rowHandle, "row");
+  installHandleDrag(dom.colHandle, "column");
+
+  // "+" append zones at the table's right/bottom edges.
+  if (dom.addRowZone) {
+    dom.addRowZone.addEventListener("mouseenter", () => refreshTableAddZones());
+    dom.addRowZone.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      void appendTableLine("row");
+    });
+  }
+  if (dom.addColZone) {
+    dom.addColZone.addEventListener("mouseenter", () => refreshTableAddZones());
+    dom.addColZone.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      void appendTableLine("column");
+    });
+  }
 
   dom.selectBox.addEventListener("mousedown", (e) => {
     const handle = e.target && e.target.closest && e.target.closest("[data-handle]");

@@ -4,6 +4,22 @@ All notable changes to `html-editor` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/) and the project follows
 [Semantic Versioning](https://semver.org/).
 
+## 0.1.5 — 2026-05-18
+
+### Added
+
+- Drag the row or column selection handle to reorder that row/column inside the table; a purple drop indicator shows where the line will land.
+- “+” append zones along the right and bottom edges of any hovered or selected table; click to add a new column on the right or row at the bottom (Notion/Obsidian style).
+- Excel-style row/column move: select a row/column, `Cmd+X` marks it with marching ants, then select another row/column in the same table and `Cmd+V` moves the cut line into that position.
+- `Ctrl+Shift+=` inserts a row/column before the current row/column selection.
+- `Ctrl+-` deletes the selected row/column. `Cmd+Shift+=` and `Cmd+-` also work as Excel-for-Mac fallbacks.
+- New server actions `row-move-to` and `col-move-to` with `target_index` / `mode="before"|"after"` parameters.
+
+### Changed
+
+- Native `Cmd+C` / `Cmd+V` no longer fires when a row or column is selected, so it can’t race with the new cut-paste move.
+- `+` zones stay visible while a table cell is selected, even when the cursor leaves the table.
+
 ## 0.1.4 — 2026-05-18
 
 ### Added

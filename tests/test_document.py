@@ -321,6 +321,96 @@ class TableOperation(unittest.TestCase):
         self.assertEqual(result["status"], 400)
         self.assertIn("colgroup", result["error"])
 
+    def _three_row_table(self) -> BeautifulSoup:
+        return soup(
+            '<table data-edit-id="t1"><tbody data-edit-id="tb1">'
+            '<tr data-edit-id="r1"><td data-edit-id="a1">A</td><td data-edit-id="a2">B</td></tr>'
+            '<tr data-edit-id="r2"><td data-edit-id="b1">C</td><td data-edit-id="b2">D</td></tr>'
+            '<tr data-edit-id="r3"><td data-edit-id="c1">E</td><td data-edit-id="c2">F</td></tr>'
+            '</tbody></table>')
+
+    def test_row_move_to_moves_row_before_target(self):
+        s = self._three_row_table()
+        ok, _ = D.table_operation(s, "c1", "row-move-to", target_index=0, mode="before")
+        self.assertTrue(ok)
+        self.assertEqual(
+            [td.get_text() for td in s.find_all("td")],
+            ["E", "F", "A", "B", "C", "D"])
+
+    def test_row_move_to_moves_row_after_target(self):
+        s = self._three_row_table()
+        ok, _ = D.table_operation(s, "a1", "row-move-to", target_index=2, mode="after")
+        self.assertTrue(ok)
+        self.assertEqual(
+            [td.get_text() for td in s.find_all("td")],
+            ["C", "D", "E", "F", "A", "B"])
+
+    def test_row_move_to_rejects_target_equals_source(self):
+        s = self._three_row_table()
+        ok, result = D.table_operation(s, "b1", "row-move-to", target_index=1, mode="before")
+        self.assertFalse(ok)
+        self.assertEqual(result["status"], 400)
+        self.assertIn("already at that position", result["error"])
+
+    def test_row_move_to_rejects_noop_neighbor(self):
+        # dropping the second row 'after' the first row is a no-op (2 stays 2nd)
+        s = self._three_row_table()
+        ok, result = D.table_operation(s, "b1", "row-move-to", target_index=0, mode="after")
+        self.assertFalse(ok)
+        self.assertIn("already at that position", result["error"])
+
+    def test_row_move_to_out_of_range(self):
+        s = self._three_row_table()
+        ok, result = D.table_operation(s, "a1", "row-move-to", target_index=5, mode="before")
+        self.assertFalse(ok)
+        self.assertIn("out of range", result["error"])
+
+    def test_row_move_to_rejects_cross_section(self):
+        s = soup(
+            '<table><thead><tr><td data-edit-id="h1">H</td></tr></thead>'
+            '<tbody><tr><td data-edit-id="b1">B</td></tr></tbody></table>')
+        ok, result = D.table_operation(s, "b1", "row-move-to", target_index=0, mode="before")
+        self.assertFalse(ok)
+        self.assertIn("thead/tbody/tfoot", result["error"])
+
+    def test_row_move_to_requires_target_index(self):
+        s = self._three_row_table()
+        ok, result = D.table_operation(s, "a1", "row-move-to")
+        self.assertFalse(ok)
+        self.assertIn("target_index", result["error"])
+
+    def test_row_move_to_rejects_bad_mode(self):
+        s = self._three_row_table()
+        ok, result = D.table_operation(s, "a1", "row-move-to", target_index=2, mode="around")
+        self.assertFalse(ok)
+        self.assertIn("before", result["error"])
+
+    def test_col_move_to_before_target(self):
+        s = self._three_row_table()
+        ok, _ = D.table_operation(s, "a2", "col-move-to", target_index=0, mode="before")
+        self.assertTrue(ok)
+        rows = [[td.get_text() for td in tr.find_all("td")] for tr in s.find_all("tr")]
+        self.assertEqual(rows, [["B", "A"], ["D", "C"], ["F", "E"]])
+
+    def test_col_move_to_after_target(self):
+        s = self._three_row_table()
+        ok, _ = D.table_operation(s, "a1", "col-move-to", target_index=1, mode="after")
+        self.assertTrue(ok)
+        rows = [[td.get_text() for td in tr.find_all("td")] for tr in s.find_all("tr")]
+        self.assertEqual(rows, [["B", "A"], ["D", "C"], ["F", "E"]])
+
+    def test_col_move_to_rejects_same_column(self):
+        s = self._three_row_table()
+        ok, result = D.table_operation(s, "a1", "col-move-to", target_index=0, mode="before")
+        self.assertFalse(ok)
+        self.assertIn("already at that position", result["error"])
+
+    def test_col_move_to_out_of_range(self):
+        s = self._three_row_table()
+        ok, result = D.table_operation(s, "a1", "col-move-to", target_index=4, mode="before")
+        self.assertFalse(ok)
+        self.assertIn("out of range", result["error"])
+
 
 # --- duplicate_element -----------------------------------------------------
 
