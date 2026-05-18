@@ -19,7 +19,7 @@ All notable changes to `html-editor` are documented here. The format follows
 - **Server benchmark script.** `scripts/bench_server_table_ops.py` measures
   parse/save/table-operation/batch-save hot paths.
 - **Browser benchmark script.** `npm run bench:browser` measures table API
-  plus reload-free DOM-apply timings for row/column inserts and moves in
+  plus reload-free DOM-patch timings for row/column inserts and moves in
   Chromium.
 - Documented a local-development skill symlink so `html-editor` is discoverable
   to Pi without installing the full package.
@@ -35,6 +35,9 @@ All notable changes to `html-editor` are documented here. The format follows
 - Row/column insert, delete, append, move, and staged row/column paste now
   update the live DOM after a successful save instead of forcing a full page
   reload; a safe reload fallback remains if local DOM application fails.
+- Structural row/column table ops now request compact DOM patches instead of
+  full table snapshots on the happy path, keeping insert/delete responses
+  closer to move latency on large tables.
 - Clipboard/range-cell actions now live in `client/clipboard.js`, reducing the
   event router to keyboard/mouse dispatch instead of copy/paste implementation
   details.

@@ -307,6 +307,32 @@ test.describe("keyboard navigation + adversarial flows", () => {
     }
   });
 
+  test("row insert patch handles direct <tr> children without reloading", async ({ page }) => {
+    const editor = await startEditor("table-direct-rows.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+      await selectCell(page, "B");
+      await page.locator('#__edit_toolbar [data-act="table"]').click();
+      const marker = await setReloadMarker(page);
+      await page.locator('#__edit_tablemenu [data-table-act="row-insert-after"]').click();
+      await page.waitForFunction(() => document.querySelectorAll('table[data-edit-id="d2"] tr').length === 3);
+      await expectNoReload(page, marker);
+      const rows = await page.locator('table[data-edit-id="d2"] tr').evaluateAll((trs) =>
+        trs.map((tr) => Array.from(tr.cells).map((td) => td.textContent.trim())));
+      expect(rows).toEqual([
+        ["A", "B"],
+        ["", ""],
+        ["C", "D"],
+      ]);
+      expect(await selectedText(page)).toBe("");
+      expect(persistedFirstTableRows(editor.readFile())).toEqual(rows);
+      expect(editor.readFile()).toMatch(/data-edit-id="e\d+"/);
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
   test("toolbar table menu inserts columns at the selected cell", async ({ page }) => {
     const editor = await startEditor("table-grid.html");
     try {

@@ -143,18 +143,18 @@ async function timeSample(browser, fn) {
   }
 }
 
-async function insertWithSnapshot(page, action, axis) {
+async function insertWithPatch(page, action, axis) {
   const marker = crypto.randomUUID();
   const id = `cell-${Math.floor(ROWS / 2)}-${Math.floor(COLS / 2)}`;
   await page.evaluate((marker) => { window.__benchReloadMarker = marker; }, marker);
   const sample = await page.evaluate(async ({ id, action, axis }) => {
     const { api } = await import("/__editor/client/api.js");
-    const { applyTableSnapshot } = await import("/__editor/client/tableops.js");
+    const { applyTablePatch } = await import("/__editor/client/tableops.js");
     const t0 = performance.now();
-    const result = await api.tableOperation(id, action, { include_table_html: true });
+    const result = await api.tableOperation(id, action, { include_table_patch: true });
     const apiMs = performance.now() - t0;
     const t1 = performance.now();
-    const applied = applyTableSnapshot(result, axis);
+    const applied = applyTablePatch(result, axis);
     const applyMs = performance.now() - t1;
     if (!applied) throw new Error(`${action} table snapshot apply failed`);
     return { apiMs, applyMs, totalMs: apiMs + applyMs };
@@ -186,8 +186,8 @@ async function moveWithoutReload(page, axis) {
 }
 
 const ops = [
-  ["row-insert-after snapshot", (page) => insertWithSnapshot(page, "row-insert-after", "row")],
-  ["col-insert-after snapshot", (page) => insertWithSnapshot(page, "col-insert-after", "column")],
+  ["row-insert-after patch", (page) => insertWithPatch(page, "row-insert-after", "row")],
+  ["col-insert-after patch", (page) => insertWithPatch(page, "col-insert-after", "column")],
   ["row-move-to client-dom", (page) => moveWithoutReload(page, "row")],
   ["col-move-to client-dom", (page) => moveWithoutReload(page, "column")],
 ];

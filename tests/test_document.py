@@ -295,7 +295,8 @@ class TableOperation(unittest.TestCase):
             '<tr data-edit-id="e3"><td data-edit-id="e4"><span class="badge" data-edit-id="e5">A</span></td>'
             '<td data-edit-id="e6">B</td></tr>'
             '</tbody></table>')
-        ok, result = D.table_operation(s, "e4", "row-insert-after", include_table_html=True)
+        ok, result = D.table_operation(s, "e4", "row-insert-after",
+                                       include_table_html=True, include_table_patch=True)
         self.assertTrue(ok)
         rows = s.find_all("tr")
         self.assertEqual(len(rows), 2)
@@ -307,6 +308,8 @@ class TableOperation(unittest.TestCase):
         self.assertEqual(result["table_id"], "e1")
         self.assertIn("<table", result["table_html"])
         self.assertIn("data-edit-id=\"e1\"", result["table_html"])
+        self.assertEqual(result["table_patch"]["kind"], "row-insert")
+        self.assertIn("row_html", result["table_patch"])
 
     def test_delete_column_removes_that_cell_from_each_row(self):
         s = soup(
@@ -319,6 +322,7 @@ class TableOperation(unittest.TestCase):
         self.assertEqual(result["selection_id"], "e1")
         self.assertNotIn("table_html", result)
         self.assertNotIn("table_id", result)
+        self.assertNotIn("table_patch", result)
 
     def test_move_row_up_reorders_within_row_group(self):
         s = soup(

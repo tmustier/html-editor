@@ -472,6 +472,7 @@ def table_operation(
     target_index: Optional[int] = None,
     mode: str = "before",
     include_table_html: bool = False,
+    include_table_patch: bool = False,
 ) -> tuple[bool, dict]:
     if action not in TABLE_ACTIONS:
         return False, {"status": 400, "error":
@@ -502,6 +503,8 @@ def table_operation(
     row = rows[row_index]
     cell = geometry["cell"]
     selection: Optional[Tag] = cell
+    patch: Optional[dict] = None
+    table_id = table.get("data-edit-id")
 
     if action == "row-insert-before" or action == "row-insert-after":
         new_row = _blank_clone(row)
@@ -512,6 +515,13 @@ def table_operation(
         assign_missing_edit_ids(soup)
         new_cells = _row_cells(new_row)
         selection = new_cells[min(col_index, len(new_cells) - 1)] if new_cells else new_row
+        patch = {
+            "kind": "row-insert",
+            "table_id": table_id,
+            "parent_id": new_row.parent.get("data-edit-id") if isinstance(new_row.parent, Tag) else None,
+            "index": row_index if action.endswith("before") else row_index + 1,
+            "row_html": str(new_row),
+        }
 
     elif action == "row-delete":
         if len(rows) <= 1:
@@ -519,6 +529,7 @@ def table_operation(
         neighbor_row = rows[row_index + 1] if row_index + 1 < len(rows) else rows[row_index - 1]
         neighbor_cells = _row_cells(neighbor_row)
         selection = neighbor_cells[min(col_index, len(neighbor_cells) - 1)]
+        patch = {"kind": "row-delete", "table_id": table_id, "index": row_index}
         row.decompose()
 
     elif action == "row-move-up" or action == "row-move-down":
@@ -536,6 +547,13 @@ def table_operation(
                 return False, {"status": 400, "error": "row is already last in its section"}
             sibling_rows[sibling_index + 1].insert_after(row.extract())
         selection = cell
+        patch = {
+            "kind": "row-move",
+            "table_id": table_id,
+            "source_index": row_index,
+            "target_index": row_index - 1 if action.endswith("up") else row_index + 1,
+            "mode": "before" if action.endswith("up") else "after",
+        }
 
     elif action == "col-insert-before" or action == "col-insert-after":
         inserted: list[Tag] = []
@@ -549,12 +567,19 @@ def table_operation(
             inserted.append(new_cell)
         assign_missing_edit_ids(soup)
         selection = inserted[row_index]
+        patch = {
+            "kind": "col-insert",
+            "table_id": table_id,
+            "index": col_index if action.endswith("before") else col_index + 1,
+            "cells_html": [str(inserted_cell) for inserted_cell in inserted],
+        }
 
     elif action == "col-delete":
         if width <= 1:
             return False, {"status": 400, "error": "can't delete the only column in a table"}
         target_col = col_index + 1 if col_index < width - 1 else col_index - 1
         selection = grid[row_index][target_col]
+        patch = {"kind": "col-delete", "table_id": table_id, "index": col_index}
         for cells in grid:
             cells[col_index].decompose()
 
@@ -570,6 +595,13 @@ def table_operation(
             for cells in grid:
                 cells[col_index + 1].insert_after(cells[col_index].extract())
         selection = cell
+        patch = {
+            "kind": "col-move",
+            "table_id": table_id,
+            "source_index": col_index,
+            "target_index": col_index - 1 if action.endswith("left") else col_index + 1,
+            "mode": "before" if action.endswith("left") else "after",
+        }
 
     elif action == "row-move-to":
         if not (0 <= target_index < len(rows)):
@@ -626,8 +658,10 @@ def table_operation(
         "cell_id": cell_id,
         "selection_id": selection_id,
     }
+    if include_table_patch and patch:
+        result["table_patch"] = patch
     if include_table_html:
-        result["table_id"] = table.get("data-edit-id")
+        result["table_id"] = table_id
         result["table_html"] = str(table)
     return True, result
 
