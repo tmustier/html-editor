@@ -99,7 +99,7 @@ export function deselect() {
 // table (over a cell or within a small margin of the table's bounds). That
 // keeps them out of the way of nearby content like a paragraph right under
 // the table while still giving the user a generous hit area.
-const ADD_ZONE_PROXIMITY = 24; // px
+const ADD_ZONE_PROXIMITY = 28; // px — generous so the cursor can travel onto the pill without it vanishing
 
 function tableNearMouse() {
   if (state.mouseX < 0) return null;

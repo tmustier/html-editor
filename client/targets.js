@@ -725,9 +725,9 @@ export function placeTableAddZones(table) {
     return;
   }
   const r = rectOf(table);
-  const gap = 6;
-  const thickness = 16;
-  const corner = 16; // leave the SE corner alone for resize/move grip
+  const gap = 5;
+  const thickness = 22; // pill height/width — big enough to hit comfortably
+  const corner = 18; // leave the SE corner alone for resize/move grip
   // Bottom "+" row zone.
   const rowLeft = r.left;
   const rowWidth = Math.max(0, r.width - corner);
