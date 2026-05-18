@@ -85,30 +85,44 @@ async function tryWriteClipboard(payload, writeClipboardPayload) {
   }
 }
 
-function setCut(cut) {
-  state.lineCopy = null;
-  state.cut = cut;
-  placeCutOverlay();
+function setTransfer(op, transfer) {
+  state.transfer = { ...transfer, op };
+  placeTransferOverlay();
 }
 
-function setLineCopy(copy) {
-  state.cut = null;
-  state.lineCopy = copy;
-  placeCutOverlay();
+export function stagedTransfer(op = null, kind = null) {
+  const transfer = state.transfer;
+  if (!transfer) return null;
+  if (op && transfer.op !== op) return null;
+  if (kind && transfer.kind !== kind) return null;
+  return transfer;
+}
+
+export function stagedCut(kind = null) {
+  return stagedTransfer("cut", kind);
+}
+
+export function stagedLineCopy(kind = null) {
+  return stagedTransfer("copy", kind);
+}
+
+export function clearTransfer(op = null) {
+  if (!op || state.transfer?.op === op) {
+    state.transfer = null;
+    placeTransferOverlay();
+  }
 }
 
 export function clearCut() {
-  state.cut = null;
-  placeCutOverlay();
+  clearTransfer("cut");
 }
 
 export function clearLineCopy() {
-  state.lineCopy = null;
-  placeCutOverlay();
+  clearTransfer("copy");
 }
 
 export function hasStagedCut(kind = null) {
-  return !!state.cut && (!kind || state.cut.kind === kind);
+  return !!stagedCut(kind);
 }
 
 function lineTransfer(axis) {
@@ -142,7 +156,7 @@ export async function stageLineCut(axis, writeClipboardPayload) {
   const transfer = lineTransfer(axis);
   if (!transfer) return false;
   const clipboardOk = await tryWriteClipboard(transfer.payload, writeClipboardPayload);
-  setCut(transfer);
+  setTransfer("cut", transfer);
   flash(
     (axis === "row" ? "Row" : "Column")
       + (clipboardOk
@@ -157,7 +171,7 @@ export async function stageLineCopy(axis, writeClipboardPayload) {
   const transfer = lineTransfer(axis);
   if (!transfer) return false;
   const clipboardOk = await tryWriteClipboard(transfer.payload, writeClipboardPayload);
-  setLineCopy(transfer);
+  setTransfer("copy", transfer);
   flash(
     (axis === "row" ? "Row" : "Column")
       + (clipboardOk
@@ -179,7 +193,7 @@ export async function stageRangeCut(rangePayload, writeClipboardPayload) {
   const ids = rangePayload.sourceIds || [];
   const payload = { text: rangePayload.text, html: rangePayload.html, matrix: values };
   const clipboardOk = await tryWriteClipboard(payload, writeClipboardPayload);
-  setCut({
+  setTransfer("cut", {
     kind: "range",
     tableId,
     source: {
@@ -225,7 +239,7 @@ function effectiveMoveNoop(sourceIndex, targetIndex, mode) {
 }
 
 export async function commitLineCutPaste() {
-  const cut = state.cut;
+  const cut = stagedCut();
   if (!cut || !["row", "column"].includes(cut.kind)) return false;
   if (state.tableSelectionMode !== cut.kind) {
     flash(`Select a ${cut.kind} first (Shift+Space / Ctrl+Space).`, { kind: "warning" });
@@ -251,7 +265,7 @@ export async function commitLineCutPaste() {
 }
 
 export async function commitLineCutInsertBeforeSelection() {
-  const cut = state.cut;
+  const cut = stagedCut();
   if (!cut || !["row", "column"].includes(cut.kind)) return false;
   if (currentTableId() !== cut.tableId) {
     flash("Can't insert cut rows or columns across tables yet.", { kind: "warning" });
@@ -272,7 +286,7 @@ export async function commitLineCutInsertBeforeSelection() {
 }
 
 export async function commitLineCopyInsertBeforeSelection() {
-  const copy = state.lineCopy;
+  const copy = stagedLineCopy();
   if (!copy || !["row", "column"].includes(copy.kind)) return false;
   if (state.tableSelectionMode !== copy.kind) {
     flash(`Select a ${copy.kind} destination first (Shift+Space / Ctrl+Space).`,
@@ -338,9 +352,9 @@ function unionDocumentRect(elements) {
   return { left, top, width: right - left, height: bottom - top };
 }
 
-export function placeCutOverlay() {
+export function placeTransferOverlay() {
   if (!dom.cutBox) return;
-  const transfer = state.cut || state.lineCopy;
+  const transfer = state.transfer;
   if (!transfer) { dom.cutBox.hidden = true; return; }
   const cells = cellsForCut(transfer);
   const rect = unionDocumentRect(cells);
@@ -348,7 +362,7 @@ export function placeCutOverlay() {
   const box = dom.cutBox;
   box.hidden = false;
   box.dataset.kind = transfer.kind;
-  box.dataset.transfer = state.cut ? "cut" : "copy";
+  box.dataset.transfer = transfer.op;
   box.style.display = "block";
   box.style.left = (rect.left - 2) + "px";
   box.style.top = (rect.top - 2) + "px";
@@ -356,6 +370,8 @@ export function placeCutOverlay() {
   box.style.height = (rect.height + 4) + "px";
 }
 
-export function cutSourceIds(cut = state.cut) {
+export const placeCutOverlay = placeTransferOverlay;
+
+export function cutSourceIds(cut = stagedCut()) {
   return Array.isArray(cut?.source?.ids) ? cut.source.ids.slice() : [];
 }

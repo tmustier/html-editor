@@ -3,7 +3,7 @@
 
 import { dom } from "./dom.js";
 import { loadComments, startComment } from "./comments.js";
-import { placeCutOverlay } from "./cut.js";
+import { placeCutOverlay, stagedCut, stagedLineCopy, stagedTransfer } from "./transfer.js";
 import { performHistory, selectElement, deselect } from "./events.js";
 import { state } from "./state.js";
 import {
@@ -83,8 +83,9 @@ export function initRuntime() {
     },
     rangeCells: () => tableRangeMatrix().map((row) =>
       row.map((el) => (el ? (el.innerText || el.textContent || "").trim() : null))),
-    cut: () => state.cut ? JSON.parse(JSON.stringify(state.cut)) : null,
-    lineCopy: () => state.lineCopy ? JSON.parse(JSON.stringify(state.lineCopy)) : null,
+    transfer: () => stagedTransfer() ? JSON.parse(JSON.stringify(stagedTransfer())) : null,
+    cut: () => stagedCut() ? JSON.parse(JSON.stringify(stagedCut())) : null,
+    lineCopy: () => stagedLineCopy() ? JSON.parse(JSON.stringify(stagedLineCopy())) : null,
     undo: () => performHistory("undo"),
     redo: () => performHistory("redo"),
   };

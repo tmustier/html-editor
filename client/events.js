@@ -9,38 +9,27 @@ import { beginDrag, beginResize, cancelDrag } from "./drag.js";
 import {
   clearCut,
   clearLineCopy,
-  commitLineCopyInsertBeforeSelection,
-  commitLineCutInsertBeforeSelection,
-  stageLineCut,
-} from "./cut.js";
+  stagedCut,
+  stagedLineCopy,
+} from "./transfer.js";
 import {
-  copySelectionToClipboard,
   copySelectionToEventClipboard,
-  deleteRangeContents,
   isNativeClipboardTarget,
-  pasteFromClipboard,
   pasteIntoSelection,
   pastePayloadAtSelection,
   pasteStagedCut,
-  stageRangeCutFromSelection,
-  writeClipboardPayload,
 } from "./clipboard.js";
 import { finishActiveEdit, finishSvgLabelEdit, startEdit } from "./editing.js";
 import { state } from "./state.js";
 import { runTableOperation, tableRestoreModeForAction } from "./tableops.js";
 import {
   editableFrom,
-  ensureVisible,
-  extendTableRange,
   gridCellFrom,
-  gridForElement,
   isSvgLabelHit,
   navigate,
-  navigateGrid,
   placeBox,
   placeTableAddZones,
   placeToolbar,
-  rangeAnchorElement,
   refreshTableAddZones,
   selectElementInternal,
   selectTableDimension,
@@ -52,44 +41,10 @@ import {
   beginTableLineDrag,
   cancelTableLineDrag,
 } from "./tabledrag.js";
+import { handleEditorKeydown } from "./keyboard.js";
 
 export function selectElement(el, tableSelectionMode = null) {
   selectElementInternal(el, tableSelectionMode);
-}
-
-// Excel-style row/column promotion that also handles escalating to whole-
-// table selection. Called by the Shift+Space / Ctrl+Space shortcuts.
-//   axis = "row"    → Shift+Space (select rows)
-//   axis = "column" → Ctrl+Space  (select columns)
-//
-// Rules:
-// - In edit mode the caller is expected to have already saved the cell.
-// - In row mode + Shift+Space (same axis): no-op.
-// - In column mode + Ctrl+Space (same axis): no-op.
-// - In the *other* mode (row+Ctrl+Space or column+Shift+Space): escalate to
-//   whole-table selection.
-// - In cell/range mode: switch to row or column mode; tableRange is
-//   preserved so the promotion covers the rows/columns the range spans.
-export function promoteTableSelection(axis) {
-  const cell = gridCellFrom(state.selected);
-  if (!cell || !(axis === "row" || axis === "column")) {
-    flash("Select a table cell first.", { kind: "warning" });
-    return false;
-  }
-  const mode = state.tableSelectionMode;
-  if (mode === axis) return false; // already in this mode
-  let next;
-  if (mode === "table") {
-    next = axis; // step down from table to single axis
-  } else if ((mode === "row" && axis === "column")
-          || (mode === "column" && axis === "row")) {
-    next = "table";
-  } else {
-    next = axis;
-  }
-  selectElementInternal(state.selected, next, { preserveRange: true });
-  ensureVisible(cell);
-  return true;
 }
 
 export function deselect() {
@@ -192,8 +147,8 @@ async function appendTableLine(axis) {
     return;
   }
   const action = axis === "row" ? "row-insert-after" : "col-insert-after";
-  if (state.cut) clearCut();
-  if (state.lineCopy) clearLineCopy();
+  if (stagedCut()) clearCut();
+  if (stagedLineCopy()) clearLineCopy();
   await runTableOperation(cell, action, {
     restoreMode: axis,
     successMessage: axis === "row" ? "Row added." : "Column added.",
@@ -249,8 +204,8 @@ async function performTableOperation(action) {
     flash("Select a table cell first.", { kind: "warning" });
     return;
   }
-  if (state.cut) clearCut();
-  if (state.lineCopy) clearLineCopy();
+  if (stagedCut()) clearCut();
+  if (stagedLineCopy()) clearLineCopy();
   await runTableOperation(cell, action, {
     restoreMode: tableRestoreModeForAction(action, state.tableSelectionMode || ""),
     successMessage: `Table ${action.replace(/-/g, " ")} done.`,
@@ -291,23 +246,10 @@ async function performHistory(action) {
   }
 }
 
-// Drop the active range and re-anchor selection on a single cell. Used to
-// route follow-up actions (edit, comment) through the normal single-cell
-// code paths.
-function collapseRangeToAnchor() {
-  if (state.tableSelectionMode !== "range") return false;
-  const anchor = rangeAnchorElement();
-  if (!anchor) return false;
-  state.tableRange = null;
-  state.tableSelectionMode = null;
-  selectElementInternal(anchor);
-  return true;
-}
-
 function startEditClearingTransfers(...args) {
   // Editing cancels staged copy/cut state without mutating the source.
-  if (state.cut) clearCut();
-  if (state.lineCopy) clearLineCopy();
+  if (stagedCut()) clearCut();
+  if (stagedLineCopy()) clearLineCopy();
   startEdit(...args);
 }
 
@@ -321,7 +263,7 @@ export function initEvents() {
 
   document.addEventListener("paste", (e) => {
     if (!state.selected || state.editing || isNativeClipboardTarget(e.target)) return;
-    if (state.cut) {
+    if (stagedCut()) {
       e.preventDefault();
       void pasteStagedCut();
       return;
@@ -330,8 +272,9 @@ export function initEvents() {
     const html = e.clipboardData && e.clipboardData.getData("text/html");
     if (typeof text !== "string" && typeof html !== "string") return;
     e.preventDefault();
-    const payload = state.lineCopy?.payload && gridCellFrom(state.selected)
-      ? state.lineCopy.payload
+    const lineCopy = stagedLineCopy();
+    const payload = lineCopy?.payload && gridCellFrom(state.selected)
+      ? lineCopy.payload
       : { text: text || "", html: html || "" };
     if (state.tableSelectionMode === "range"
         || state.tableSelectionMode === "row"
@@ -439,304 +382,16 @@ export function initEvents() {
 
   // --- keyboard shortcuts -------------------------------------------------
   document.addEventListener("keydown", (e) => {
-    const t = e.target;
-    const inEditableField =
-      t && ((t.tagName === "TEXTAREA" || t.tagName === "INPUT")
-            || (t.getAttribute && t.getAttribute("contenteditable") === "true"));
-
-    if (e.key === "Escape") {
-      if (state.dragging && state.dragging.mode === "table-line") {
-        e.preventDefault(); cancelTableLineDrag(); return;
-      }
-      if (state.dragging)  { e.preventDefault(); cancelDrag(); return; }
-      if (state.svgEditing){ e.preventDefault(); finishSvgLabelEdit(false); return; }
-      if (state.editing)   return; // edit handler owns its own cancel
-      if (state.cut) { e.preventDefault(); clearCut(); flash("Cut cleared.", { kind: "info", timeout: 800 }); return; }
-      if (state.lineCopy) { e.preventDefault(); clearLineCopy(); flash("Copy cleared.", { kind: "info", timeout: 800 }); return; }
-      if (!dom.commentBox.hidden) { e.preventDefault(); dom.commentBox.hidden = true; return; }
-      if (!dom.tableMenu.hidden)  { e.preventDefault(); dom.tableMenu.hidden = true; return; }
-      if (!dom.helpOverlay.hidden){ e.preventDefault(); toggleHelp(false); return; }
-      // Step down through table selection modes:
-      //   table → range or cell (we don't track the prior axis, so collapse
-      //              straight to the range that drove the promotion if it
-      //              existed, otherwise to the single anchor cell)
-      //   row|column → range or cell
-      //   range  → cell
-      //   cell   → deselect
-      if (state.tableSelectionMode === "table" && state.selected) {
-        e.preventDefault();
-        selectElementInternal(state.selected,
-          state.tableRange ? "range" : null,
-          { preserveRange: true });
-        return;
-      }
-      if ((state.tableSelectionMode === "row" || state.tableSelectionMode === "column")
-          && state.selected) {
-        e.preventDefault();
-        // Collapse to range if a range is active, otherwise to single cell.
-        const next = state.tableRange ? "range" : null;
-        selectElementInternal(state.selected, next, { preserveRange: true });
-        return;
-      }
-      if (state.tableSelectionMode === "range" && state.selected) {
-        e.preventDefault();
-        state.tableRange = null;
-        selectElementInternal(state.selected, null);
-        return;
-      }
-      if (state.tableSelectionMode && state.selected) {
-        e.preventDefault();
-        selectElement(state.selected);
-        return;
-      }
-      if (state.selected)  { e.preventDefault(); deselect(); return; }
-      return;
-    }
-
-    const key = e.key.toLowerCase();
-    if (e.key === "Tab" && state.selected && gridCellFrom(state.selected)
-        && (state.editing || !isOverlay(t))) {
-      e.preventDefault();
-      e.stopPropagation();
-      const direction = e.shiftKey ? "previous" : "next";
-      void (async () => {
-        if (state.editing) await finishActiveEdit(true);
-        if (!navigateGrid(direction)) {
-          flash(e.shiftKey ? "No previous grid cell." : "No next grid cell.", { kind: "warning" });
-        }
-      })();
-      return;
-    }
-
-    if ((e.key === "Backspace" || e.key === "Delete") && state.cut
-        && !inEditableField && !state.editing) {
-      e.preventDefault();
-      e.stopPropagation();
-      flash("Press Esc to cancel the staged cut before clearing cells.", { kind: "warning" });
-      return;
-    }
-
-    // Range-aware delete / backspace: clear every cell in one batch.
-    if ((e.key === "Backspace" || e.key === "Delete")
-        && state.tableSelectionMode === "range" && state.selected
-        && !inEditableField && !state.editing) {
-      e.preventDefault();
-      e.stopPropagation();
-      void deleteRangeContents();
-      return;
-    }
-
-    // Range-aware Cmd+X: stage an Excel-style cut, don't clear yet.
-    if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && key === "x"
-        && state.tableSelectionMode === "range" && state.selected
-        && !inEditableField && !state.editing) {
-      e.preventDefault();
-      e.stopPropagation();
-      void stageRangeCutFromSelection();
-      return;
-    }
-
-    // Excel-style row/column cut on Cmd/Ctrl+X.
-    const cutKey = (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && key === "x";
-    const singleLineSelection = state.tableSelectionMode === "row"
-      || state.tableSelectionMode === "column";
-    const lineSpan = singleLineSelection && state.tableRange
-      ? (state.tableSelectionMode === "row"
-          ? Math.abs(state.tableRange.focus.row - state.tableRange.anchor.row) + 1
-          : Math.abs(state.tableRange.focus.col - state.tableRange.anchor.col) + 1)
-      : 1;
-    if (cutKey && singleLineSelection && state.selected
-        && !inEditableField && !state.editing) {
-      e.preventDefault();
-      e.stopPropagation();
-      if (lineSpan > 1) {
-        flash(
-          `Single-${state.tableSelectionMode} cut/paste only — multi-${state.tableSelectionMode} move coming soon.`,
-          { kind: "warning" });
-        return;
-      }
-      void stageLineCut(state.tableSelectionMode, writeClipboardPayload);
-      return;
-    }
-
-    // Excel-style paste-as-move if a staged cut is pending.
-    if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && key === "v"
-        && state.cut && state.selected
-        && !inEditableField && !state.editing) {
-      e.preventDefault();
-      e.stopPropagation();
-      if (singleLineSelection && lineSpan > 1) {
-        flash(
-          `Single-${state.tableSelectionMode} cut/paste only.`,
-          { kind: "warning" });
-        return;
-      }
-      void pasteStagedCut();
-      return;
-    }
-
-    const isClipboardKey = (e.metaKey || e.ctrlKey) && !e.altKey
-      && (key === "c" || key === "v");
-    if (isClipboardKey && state.selected && !inEditableField && !state.editing) {
-      e.preventDefault();
-      e.stopPropagation();
-      void (key === "c" ? copySelectionToClipboard() : pasteFromClipboard());
-      return;
-    }
-
-    const isHistoryKey = (e.metaKey || e.ctrlKey) && !e.altKey
-      && (key === "z" || key === "y");
-    if (isHistoryKey && !inEditableField && !state.editing) {
-      e.preventDefault();
-      if (state.cut) clearCut();
-      if (state.lineCopy) clearLineCopy();
-      performHistory(key === "y" || e.shiftKey ? "redo" : "undo");
-      return;
-    }
-
-    // Excel-style row/column structure shortcuts:
-    //   Ctrl+Shift+= (the "+" key) inserts before the selection.
-    //   Ctrl+- deletes the selected row/column.
-    //   Cmd+Shift+= / Cmd+- as Mac Excel fallbacks.
-    const isPlusInsert = (e.ctrlKey || e.metaKey) && !e.altKey && e.shiftKey
-      && (e.key === "+" || e.key === "=" || e.code === "Equal");
-    const isMinusDelete = (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey
-      && (e.key === "-" || e.key === "_" || e.code === "Minus");
-    if ((isPlusInsert || isMinusDelete) && !inEditableField && !state.editing) {
-      if (isPlusInsert && state.cut && ["row", "column"].includes(state.cut.kind)
-          && state.selected && gridCellFrom(state.selected)) {
-        e.preventDefault();
-        e.stopPropagation();
-        void commitLineCutInsertBeforeSelection();
-        return;
-      }
-      if (isPlusInsert && state.lineCopy && ["row", "column"].includes(state.lineCopy.kind)
-          && state.selected && gridCellFrom(state.selected)) {
-        e.preventDefault();
-        e.stopPropagation();
-        void commitLineCopyInsertBeforeSelection();
-        return;
-      }
-      if (isPlusInsert && state.cut && state.cut.kind === "range") {
-        e.preventDefault();
-        e.stopPropagation();
-        flash("Insert cut only supports full rows/columns; use Cmd+V to move a range.",
-          { kind: "warning" });
-        return;
-      }
-      if (singleLineSelection && state.selected) {
-        e.preventDefault();
-        e.stopPropagation();
-        if (lineSpan > 1) {
-          flash(
-            `Applied to first ${state.tableSelectionMode} only — multi-${state.tableSelectionMode} insert/delete coming soon.`,
-            { kind: "info", timeout: 1400 });
-        }
-        insertOrDeleteLine(isPlusInsert ? "insert" : "delete");
-        return;
-      }
-      // Otherwise let the browser handle Cmd+/- zoom etc.
-    }
-
-    if (inEditableField || state.editing) return;
-
-    if (e.key === "?" || (e.key === "/" && e.shiftKey)) {
-      e.preventDefault();
-      toggleHelp();
-      return;
-    }
-
-    if (!state.selected) return;
-
-    if (e.key === " " && state.selected && gridCellFrom(state.selected)) {
-      if (e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey) {
-        e.preventDefault();
-        promoteTableSelection("row");
-        return;
-      }
-      if ((e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey)
-          || (e.altKey && !e.metaKey && !e.ctrlKey && !e.shiftKey)) {
-        e.preventDefault();
-        promoteTableSelection("column");
-        return;
-      }
-    }
-
-    // Shift+Arrow extends an Excel-style rectangular cell range across the
-    // current table. Honors row/column promotion when those modes are already
-    // active (Shift+Down in row mode adds another row, etc.).
-    const isArrow = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key);
-    if (isArrow && e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey
-        && gridCellFrom(state.selected) && !isOverlay(t)) {
-      const direction = e.key.replace("Arrow", "").toLowerCase();
-      const mode = state.tableSelectionMode;
-      // In row mode, only Shift+Up/Down is meaningful (rows already cover
-      // every column); in column mode, only Shift+Left/Right.
-      if (mode === "row" && (direction === "left" || direction === "right")) {
-        e.preventDefault();
-        return;
-      }
-      if (mode === "column" && (direction === "up" || direction === "down")) {
-        e.preventDefault();
-        return;
-      }
-      if (mode === "table") {
-        e.preventDefault();
-        return;
-      }
-      e.preventDefault();
-      const changed = extendTableRange(direction);
-      if (changed) {
-        placeBox(dom.selectBox, state.selected);
-        placeToolbar(state.selected);
-        const grid = gridForElement(state.selected);
-        if (grid && state.tableRange) {
-          const f = state.tableRange.focus;
-          const focusCell = grid.matrix[f.row] && grid.matrix[f.row][f.col];
-          if (focusCell) ensureVisible(focusCell);
-        }
-      }
-      return;
-    }
-
-    const gridArrow = !e.altKey && !e.ctrlKey && !e.shiftKey
-      && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key)
-      && gridCellFrom(state.selected)
-      && !isOverlay(t);
-    if (gridArrow) {
-      e.preventDefault();
-      // Bare arrow keys collapse any range / multi-line selection back to a
-      // single cell before moving (Excel behavior).
-      if (state.tableRange || state.tableSelectionMode) {
-        state.tableRange = null;
-        state.tableSelectionMode = null;
-      }
-      const direction = e.key.replace("Arrow", "").toLowerCase();
-      navigateGrid(e.metaKey ? `edge-${direction}` : direction);
-      return;
-    }
-
-    const unmodified = !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey;
-    if (e.key === "F2" || (unmodified && (e.key === "Enter" || key === "e"))) {
-      e.preventDefault();
-      // In range mode, collapse to anchor cell before entering edit.
-      if (state.tableSelectionMode === "range") collapseRangeToAnchor();
-      startEditClearingTransfers();
-      return;
-    }
-    if (unmodified && key === "c") {
-      e.preventDefault();
-      // In range mode, collapse to anchor cell before starting the comment.
-      if (state.tableSelectionMode === "range") collapseRangeToAnchor();
-      startComment();
-      return;
-    }
-    if (e.altKey) {
-      if (e.key === "ArrowLeft")  { e.preventDefault(); navigate("left");  return; }
-      if (e.key === "ArrowRight") { e.preventDefault(); navigate("right"); return; }
-      if (e.key === "ArrowUp")    { e.preventDefault(); navigate("up");    return; }
-      if (e.key === "ArrowDown")  { e.preventDefault(); navigate("down");  return; }
-    }
+    handleEditorKeydown(e, {
+      cancelTableLineDrag,
+      cancelDrag,
+      deselect,
+      finishActiveEdit,
+      finishSvgLabelEdit,
+      insertOrDeleteLine,
+      performHistory,
+      startEditClearingTransfers,
+    });
   });
 
   // --- toolbar / popovers / drag handle / resize handles ------------------

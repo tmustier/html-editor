@@ -15,6 +15,12 @@ All notable changes to `html-editor` are documented here. The format follows
   structurally before the current row/column, preserving copied cell markup and
   assigning fresh edit IDs instead of inserting an empty line.
 
+### Changed
+
+- Refactored staged copy/cut state into one transfer model, split table-grid
+  geometry, keyboard routing, server table operations, and large table e2e
+  coverage into focused modules/files without changing behavior.
+
 ## 0.1.8 — 2026-05-18
 
 ### Added

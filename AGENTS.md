@@ -12,8 +12,8 @@ There is also an optional Pi extension (`extensions/html-editor-comments.ts`) th
 
 - `serve.py` — launcher that calls `server.app:main`.
 - `server/` — Python server package:
-  - `app.py`, `routes.py`, `document.py`, `history.py`, `comments.py`, `assets.py`
-  - `document.py` is the **only** place that should mutate the BeautifulSoup tree.
+  - `app.py`, `routes.py`, `document.py`, `table_ops.py`, `history.py`, `comments.py`, `assets.py`
+  - `document.py` owns the public mutation functions; table row/column internals live in `table_ops.py` behind `document.table_operation()`.
 - `client/*.js` — native ES modules, no bundler, no TypeScript. `main.js` is the entrypoint; the rest are pulled via `import`.
 - `styles/*.css` — concatenated in filename order; served at `/__editor/main.css`.
 - `extensions/html-editor-comments.ts` — Pi extension; do not import editor code from it.
@@ -34,17 +34,17 @@ Always run `./scripts/check.sh` after edits; run `./scripts/test.sh` before comm
 
 ## Conventions
 
-- **Server mutations** live in `server/document.py` as pure functions returning `(ok: bool, payload: dict)`. Routes in `server/routes.py` are thin: read JSON, call the pure function, snapshot history, save, return JSON. Tests for new mutations go in `tests/test_document.py`.
+- **Server mutations** live in `server/document.py` as pure functions returning `(ok: bool, payload: dict)`. Table row/column internals live in `server/table_ops.py` and are exposed through `document.table_operation()`. Routes in `server/routes.py` are thin: read JSON, call the pure function, snapshot history, save, return JSON. Tests for new mutations go in `tests/test_document.py`.
 - **Client architecture**: each `client/*.js` module owns one concern (see README "Client modules"). Cross-cutting helpers belong in `client/dom.js` (`flash`, `icon`) or `client/interaction.js` (locks, reload timing). Do not introduce a build step.
 - **CSS files** are concatenated in filename order. Keep `00-base.css` minimal and group new rules into the matching numbered file.
-- **Semantic target model** in `client/targets.js` is the source of truth for what is editable, draggable, commentable. Add new behaviours by extending the target model, not by checking tag names in callers.
+- **Semantic target model** in `client/targets.js` is the source of truth for what is editable, draggable, commentable. Table matrix/range helpers belong in `client/tablegrid.js`; shortcut routing belongs in `client/keyboard.js`; staged copy/cut state belongs in `client/transfer.js`.
 - **Keyboard shortcuts**: when you add or change one, update the in-browser help table in `client/dom.js` and the keyboard table in `README.md`.
 
 ## Things to avoid
 
 - Do **not** make tests depend on any specific user-supplied HTML file or absolute path on the developer's machine. Tests must build their own fixtures in `tests/e2e/fixtures/` or inline in `tests/test_document.py`.
 - Do **not** reintroduce the shared `/tmp/html-editor-comments.jsonl` broadcast file as a fallback. Per-session bridges only. The `comments_bridge=none` mode is the no-pi default.
-- Do **not** mutate the BeautifulSoup tree outside `server/document.py`.
+- Do **not** mutate the BeautifulSoup tree outside `server/document.py` or its focused helper modules such as `server/table_ops.py`.
 - Do **not** add a JS bundler, transpiler, or framework to the client. Native ES modules only.
 - Do **not** commit anything employer-specific, customer/account data, or local absolute paths beyond test fixtures.
 

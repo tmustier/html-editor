@@ -148,6 +148,7 @@ The server injects a small overlay (one CSS link + one ES module script tag) int
   - `app.py` argparse + `ThreadingHTTPServer` wiring
   - `routes.py` HTTP route handlers (one per editor capability)
   - `document.py` pure BeautifulSoup mutations (no IO, no HTTP)
+  - `table_ops.py` rectangular table geometry + row/column mutations
   - `history.py` thread-safe undo/redo over disk snapshots
   - `comments.py` comment store + Pi-extension JSONL bridge
   - `assets.py` reads `client/*.js` and `styles/*.css` at import time
@@ -165,8 +166,11 @@ The server injects a small overlay (one CSS link + one ES module script tag) int
 - `api.js` fetch wrappers for every server endpoint
 - `interaction.js` click-lock and reload helpers
 - `dom.js` overlay DOM, `dom.*` refs, `icon()`, `flash()`
-- `targets.js` semantic target model + DOM walks + grid navigation + breadcrumb + placement
-- `events.js` mouse/keyboard/toolbar wiring, clipboard, deselect
+- `targets.js` semantic target model + DOM walks + breadcrumb + placement
+- `tablegrid.js` table matrix/range geometry, grid navigation, row/column hit areas
+- `keyboard.js` shortcut routing for selection, transfer, range, history, and edit commands
+- `events.js` mouse/paste/toolbar wiring and deselect
+- `transfer.js` staged row/column/range copy-cut state + source overlay
 - `editing.js` HTML inline text edit + SVG label edit
 - `drag.js` HTML reorder, SVG spatial drag, HTML resize
 - `comments.js` comment box, sidebar list, dot markers
@@ -186,10 +190,10 @@ Raw SVG primitives other than standalone `<text>` (`rect`, `path`, markers, etc.
 
 ## Adding a new editor capability
 
-1. Add a pure function in `server/document.py` that mutates a BeautifulSoup tree and returns `(ok: bool, payload: dict)`.
+1. Add a pure function in `server/document.py` that mutates a BeautifulSoup tree and returns `(ok: bool, payload: dict)`; table row/column structure logic belongs in `server/table_ops.py` behind the `document.table_operation()` wrapper.
 2. Add the route in `server/routes.py` — read JSON body, call your function, snapshot history, save, return the payload. Register it in `_ROUTES`.
 3. Add tests in `tests/test_document.py`.
-4. Call the new endpoint from the client (`client/api.js`, then wire from `client/events.js` or `client/editing.js`).
+4. Call the new endpoint from the client (`client/api.js`, then wire from the focused client module: e.g. `keyboard.js`, `events.js`, `editing.js`, or `tableops.js`).
 
 ## License
 

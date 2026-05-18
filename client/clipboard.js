@@ -11,7 +11,9 @@ import {
   cutSourceIds,
   stageLineCopy,
   stageRangeCut,
-} from "./cut.js";
+  stagedCut,
+  stagedLineCopy,
+} from "./transfer.js";
 import { dom, flash } from "./dom.js";
 import { reloadAfterMutation } from "./interaction.js";
 import { state } from "./state.js";
@@ -239,8 +241,8 @@ function rangeClipboardPayload() {
 
 export function copySelectionToEventClipboard(clipboardData) {
   // A fresh copy replaces/cancels any staged cut/copy, matching spreadsheet UX.
-  if (state.cut) clearCut();
-  if (state.lineCopy) clearLineCopy();
+  if (stagedCut()) clearCut();
+  if (stagedLineCopy()) clearLineCopy();
   if (state.tableSelectionMode === "range") {
     if (!clipboardData) return false;
     const payload = rangeClipboardPayload();
@@ -273,11 +275,11 @@ function lineSelectionSpan(axis) {
 
 export async function copySelectionToClipboard() {
   // A fresh copy replaces/cancels any staged cut/copy, matching spreadsheet UX.
-  if (state.cut) clearCut();
+  if (stagedCut()) clearCut();
   if (state.tableSelectionMode === "row" || state.tableSelectionMode === "column") {
     const span = lineSelectionSpan(state.tableSelectionMode);
     if (span > 1) {
-      if (state.lineCopy) clearLineCopy();
+      if (stagedLineCopy()) clearLineCopy();
       flash(`Multi-${state.tableSelectionMode} copy/insert is coming soon; copy a range for values instead.`,
         { kind: "warning", timeout: 1800 });
       return;
@@ -285,7 +287,7 @@ export async function copySelectionToClipboard() {
     await stageLineCopy(state.tableSelectionMode, writeClipboardPayload);
     return;
   }
-  if (state.lineCopy) clearLineCopy();
+  if (stagedLineCopy()) clearLineCopy();
   if (state.tableSelectionMode === "range") {
     const payload = rangeClipboardPayload();
     if (payload) {
@@ -423,20 +425,22 @@ async function readClipboardPayload() {
 }
 
 export async function pasteFromClipboard() {
-  if (state.cut) {
+  if (stagedCut()) {
     await pasteStagedCut();
     return;
   }
-  if (state.lineCopy?.payload && gridCellFrom(state.selected)) {
-    await pastePayloadAtSelection(state.lineCopy.payload);
+  const lineCopy = stagedLineCopy();
+  if (lineCopy?.payload && gridCellFrom(state.selected)) {
+    await pastePayloadAtSelection(lineCopy.payload);
     return;
   }
   try {
     const payload = await readClipboardPayload();
     await pastePayloadAtSelection(payload);
   } catch (err) {
-    if (state.lineCopy?.payload) {
-      await pastePayloadAtSelection(state.lineCopy.payload);
+    const fallbackCopy = stagedLineCopy();
+    if (fallbackCopy?.payload) {
+      await pastePayloadAtSelection(fallbackCopy.payload);
       return;
     }
     flash(err.message || "Clipboard paste is not available here.", { kind: "warning" });
@@ -458,7 +462,7 @@ function rangesOverlap(sourceIds, targets) {
 }
 
 async function pasteStagedRangeCut() {
-  const cut = state.cut;
+  const cut = stagedCut();
   if (!cut || cut.kind !== "range") return false;
   const anchor = state.tableSelectionMode === "range" ? rangeAnchorElement() : state.selected;
   const targetCell = gridCellFrom(anchor);
@@ -513,8 +517,9 @@ async function pasteStagedRangeCut() {
 }
 
 export async function pasteStagedCut() {
-  if (!state.cut) return false;
-  if (state.cut.kind === "range") return pasteStagedRangeCut();
+  const cut = stagedCut();
+  if (!cut) return false;
+  if (cut.kind === "range") return pasteStagedRangeCut();
   return commitLineCutPaste();
 }
 
