@@ -6,6 +6,8 @@ All notable changes to `html-editor` are documented here. The format follows
 
 ## Unreleased
 
+## 0.2.1 — 2026-05-18
+
 ### Added
 
 - Added correctness-focused linting: ESLint for browser/test/benchmark JS,
