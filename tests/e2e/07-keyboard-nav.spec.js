@@ -21,6 +21,13 @@ test.describe("keyboard navigation + adversarial flows", () => {
       (window.__edit.target()?.el?.textContent || "").trim());
   }
 
+  function persistedFirstTableRows(html) {
+    const table = html.match(/<table\b[\s\S]*?<\/table>/i)?.[0] || "";
+    return Array.from(table.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi), (rowMatch) =>
+      Array.from(rowMatch[1].matchAll(/<t[dh]\b[^>]*>([\s\S]*?)<\/t[dh]>/gi), (cellMatch) =>
+        cellMatch[1].replace(/<[^>]*>/g, "").trim()));
+  }
+
   async function cmdArrow(page, key) {
     await page.keyboard.down("Meta");
     await page.keyboard.press(key);
@@ -886,7 +893,9 @@ test.describe("keyboard navigation + adversarial flows", () => {
       await page.goto(editor.url);
       await waitForEditor(page);
       const id = await page.locator('td:text-is("Delta")').getAttribute("data-edit-id");
-      // Drive the new move-to action directly via the public client API.
+      await page.evaluate(() => { window.__moveReloadMarker = crypto.randomUUID(); });
+      const marker = await page.evaluate(() => window.__moveReloadMarker);
+      // Drive the move-to action directly via the public client API.
       await page.evaluate(async ({ id }) => {
         const mod = await import("/__editor/client/tabledrag.js");
         await mod.runMoveTo("row", id, 2, "after");
@@ -896,7 +905,14 @@ test.describe("keyboard navigation + adversarial flows", () => {
           .map((tr) => tr.cells[0].textContent.trim())
           .join(",") === "Alpha,Eta,Delta");
       await waitForEditor(page);
+      await page.waitForTimeout(350);
+      expect(await page.evaluate(() => window.__moveReloadMarker)).toBe(marker);
       expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("row");
+      expect(persistedFirstTableRows(editor.readFile())).toEqual([
+        ["Alpha", "Beta", "Gamma"],
+        ["Eta", "Theta", "Iota"],
+        ["Delta", "Epsilon", "Zeta"],
+      ]);
     } finally {
       await editor.cleanup();
     }
@@ -908,6 +924,8 @@ test.describe("keyboard navigation + adversarial flows", () => {
       await page.goto(editor.url);
       await waitForEditor(page);
       const id = await page.locator('td:text-is("Gamma")').getAttribute("data-edit-id");
+      await page.evaluate(() => { window.__moveReloadMarker = crypto.randomUUID(); });
+      const marker = await page.evaluate(() => window.__moveReloadMarker);
       await page.evaluate(async ({ id }) => {
         const mod = await import("/__editor/client/tabledrag.js");
         await mod.runMoveTo("column", id, 0, "before");
@@ -915,7 +933,14 @@ test.describe("keyboard navigation + adversarial flows", () => {
       await page.waitForFunction(() =>
         document.querySelector('table[data-edit-id="e2"] tr')?.cells[0]?.textContent.trim() === "Gamma");
       await waitForEditor(page);
+      await page.waitForTimeout(350);
+      expect(await page.evaluate(() => window.__moveReloadMarker)).toBe(marker);
       expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("column");
+      expect(persistedFirstTableRows(editor.readFile())).toEqual([
+        ["Gamma", "Alpha", "Beta"],
+        ["Zeta", "Delta", "Epsilon"],
+        ["Iota", "Eta", "Theta"],
+      ]);
     } finally {
       await editor.cleanup();
     }

@@ -133,6 +133,7 @@ The package also ships an Agent Skill (`skills/html-editor/SKILL.md`). Once inst
 ./scripts/test.sh --fast      # unit tests only (sub-second)
 ./scripts/test.sh             # unit tests + headless Playwright e2e
 ./scripts/test.sh --ui        # unit tests + Playwright UI runner
+npm run bench:browser -- --rows=120 --cols=30 --runs=5  # browser table-op timings
 curl -s http://127.0.0.1:8765/healthz
 ```
 

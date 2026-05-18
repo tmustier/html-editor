@@ -12,8 +12,11 @@ import { reloadAfterMutation } from "./interaction.js";
 import { state } from "./state.js";
 import {
   dropSlotFor,
+  ensureVisible,
   gridCellFrom,
   gridForElement,
+  refreshTableAddZones,
+  selectElementInternal,
   tableLineRects,
   tableRowIndexOf,
 } from "./targets.js";
@@ -105,23 +108,93 @@ async function onLineDragEnd(event) {
   await runMoveTo(axis, cellId, slot.targetIndex, slot.mode);
 }
 
+function cellSelector(id) {
+  return `[data-edit-id="${CSS.escape(id)}"]`;
+}
+
+function rememberSelectionForReload(selectionId, axis) {
+  if (!selectionId) return;
+  sessionStorage.setItem("__edit_restore_selection", selectionId);
+  sessionStorage.setItem("__edit_restore_table_mode", axis);
+}
+
+function moveRowInDom(sourceCell, targetIndex, mode) {
+  const grid = gridForElement(sourceCell);
+  const sourceRow = sourceCell?.closest("tr");
+  const targetRow = grid?.matrix?.[targetIndex]?.[0]?.closest("tr");
+  if (!sourceRow || !targetRow || !sourceRow.parentNode || !targetRow.parentNode) {
+    return false;
+  }
+  if (sourceRow.parentNode !== targetRow.parentNode) return false;
+  if (mode === "before") targetRow.parentNode.insertBefore(sourceRow, targetRow);
+  else targetRow.parentNode.insertBefore(sourceRow, targetRow.nextSibling);
+  return true;
+}
+
+function moveColumnInDom(sourceCell, targetIndex, mode) {
+  const grid = gridForElement(sourceCell);
+  const sourceIndex = grid?.position?.col;
+  if (sourceIndex == null) return false;
+  const moves = [];
+  for (const row of grid.matrix || []) {
+    const source = row?.[sourceIndex];
+    const target = row?.[targetIndex];
+    if (!source || !target || !source.parentNode || source.parentNode !== target.parentNode) {
+      return false;
+    }
+    moves.push({ source, target });
+  }
+  for (const { source, target } of moves) {
+    if (mode === "before") target.parentNode.insertBefore(source, target);
+    else target.parentNode.insertBefore(source, target.nextSibling);
+  }
+  return true;
+}
+
+function applyMoveToDom(axis, cellId, targetIndex, mode, selectionId) {
+  const sourceCell = document.querySelector(cellSelector(cellId));
+  if (!sourceCell) return false;
+  const moved = axis === "row"
+    ? moveRowInDom(sourceCell, targetIndex, mode)
+    : moveColumnInDom(sourceCell, targetIndex, mode);
+  if (!moved) return false;
+  const selected = selectionId
+    ? document.querySelector(cellSelector(selectionId))
+    : sourceCell;
+  if (!selected) return false;
+  selectElementInternal(selected, axis);
+  ensureVisible(selected);
+  refreshTableAddZones();
+  return true;
+}
+
 export async function runMoveTo(axis, cellId, targetIndex, mode) {
   const action = axis === "row" ? "row-move-to" : "col-move-to";
+  let result;
   try {
-    const result = await api.tableOperation(cellId, action,
+    result = await api.tableOperation(cellId, action,
       { target_index: targetIndex, mode });
-    if (result.selection_id) {
-      sessionStorage.setItem("__edit_restore_selection", result.selection_id);
-      sessionStorage.setItem("__edit_restore_table_mode", axis);
-    }
-    flash(axis === "row" ? "Row moved." : "Column moved.",
-      { kind: "success", timeout: 1200 });
-    reloadAfterMutation({ delay: 200 });
-    return true;
   } catch (err) {
     flash("Move failed: " + err.message, { kind: "error", timeout: 3000 });
     return false;
   }
+
+  let localOk = false;
+  try {
+    localOk = applyMoveToDom(axis, cellId, targetIndex, mode, result.selection_id);
+  } catch (err) {
+    console.warn("html-editor: local table move apply failed; reloading", err);
+  }
+  flash(axis === "row" ? "Row moved." : "Column moved.",
+    { kind: "success", timeout: 1200 });
+  if (!localOk) {
+    rememberSelectionForReload(result.selection_id, axis);
+    reloadAfterMutation({ delay: 200 });
+  } else {
+    sessionStorage.removeItem("__edit_restore_selection");
+    sessionStorage.removeItem("__edit_restore_table_mode");
+  }
+  return true;
 }
 
 export function cancelTableLineDrag() {

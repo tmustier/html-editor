@@ -6,7 +6,8 @@
   "scripts": {
     "test": "./scripts/test.sh",
     "test:fast": "./scripts/test.sh --fast",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "bench:browser": "node scripts/bench_browser_table_ops.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.49.1"
