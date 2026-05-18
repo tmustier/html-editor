@@ -15,6 +15,8 @@ from typing import Optional
 
 from bs4 import BeautifulSoup, NavigableString, Tag
 
+from . import table_ops as _table_ops
+
 # Tags we never tag (or even consider) as editable targets.
 SVG_PRIMITIVE_TAGS = {
     "svg", "defs", "clippath", "clipPath", "lineargradient", "linearGradient",
@@ -343,8 +345,6 @@ def update_text_many(
 
 
 # --- table structure operations -------------------------------------------
-
-from . import table_ops as _table_ops
 
 TABLE_ACTIONS = _table_ops.TABLE_ACTIONS
 TABLE_ACTIONS_NEED_TARGET = _table_ops.TABLE_ACTIONS_NEED_TARGET

@@ -29,7 +29,6 @@ import {
   navigate,
   placeBox,
   placeTableAddZones,
-  placeToolbar,
   refreshTableAddZones,
   selectElementInternal,
   selectTableDimension,

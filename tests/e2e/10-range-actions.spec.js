@@ -1,15 +1,11 @@
 import { test, expect } from "@playwright/test";
 import { startEditor, waitForEditor } from "./helpers.js";
 import {
-  cmdArrow,
-  expectNoReload,
-  persistedFirstTableRows,
   rangeBounds,
   rangeCellTexts,
   readCellText,
   selectCell,
   selectedText,
-  setReloadMarker,
 } from "./table-helpers.js";
 
 test.describe("table range actions", () => {

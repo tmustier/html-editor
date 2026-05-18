@@ -25,7 +25,9 @@ There is also an optional Pi extension (`extensions/html-editor-comments.ts`) th
 
 ```bash
 python3 serve.py path/to/some.html --port 8765 --no-open
-./scripts/check.sh            # syntax + unit tests
+npm install                   # once; requires Node >=20.19
+./scripts/check.sh            # ESLint + Ruff + syntax + unit tests
+npm run lint                  # static lint only
 ./scripts/test.sh             # unit + Playwright e2e
 ./scripts/test.sh --fast      # unit only
 ```
@@ -37,6 +39,7 @@ Always run `./scripts/check.sh` after edits; run `./scripts/test.sh` before comm
 - **Server mutations** live in `server/document.py` as pure functions returning `(ok: bool, payload: dict)`. Table row/column internals live in `server/table_ops.py` and are exposed through `document.table_operation()`. Routes in `server/routes.py` are thin: read JSON, call the pure function, snapshot history, save, return JSON. Tests for new mutations go in `tests/test_document.py`.
 - **Client architecture**: each `client/*.js` module owns one concern (see README "Client modules"). Cross-cutting helpers belong in `client/dom.js` (`flash`, `icon`) or `client/interaction.js` (locks, reload timing). Do not introduce a build step.
 - **CSS files** are concatenated in filename order. Keep `00-base.css` minimal and group new rules into the matching numbered file.
+- **Static analysis**: ESLint checks JS modules/tests/scripts; Ruff checks Python. The rule set is correctness-focused, not formatting-heavy. Dev tooling requires Node `>=20.19`; Ruff is pinned in `requirements-dev.txt` and `scripts/ruff.sh` uses only a matching installed Ruff or its pinned `uvx` fallback. Keep new code lint-clean via `npm run lint` or `./scripts/check.sh`.
 - **Semantic target model** in `client/targets.js` is the source of truth for what is editable, draggable, commentable. Table matrix/range helpers belong in `client/tablegrid.js`; shortcut routing belongs in `client/keyboard.js`; staged copy/cut state belongs in `client/transfer.js`.
 - **Keyboard shortcuts**: when you add or change one, update the in-browser help table in `client/dom.js` and the keyboard table in `README.md`.
 

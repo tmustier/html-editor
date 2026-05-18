@@ -203,7 +203,7 @@ function svgPointFromClient(svgEl, clientX, clientY) {
 function charIndexAtClient(node, clientX, clientY) {
   const svg = node.ownerSVGElement;
   if (!svg) return null;
-  let idx = -1;
+  let idx;
   try {
     const pt = svgPointFromClient(svg, clientX, clientY);
     idx = node.getCharNumAtPosition(pt);
@@ -220,7 +220,10 @@ function charIndexAtClient(node, clientX, clientY) {
         if (clientX > (left + right) / 2) return idx + 1;
         return idx;
       }
-    } catch (_) {}
+    } catch (_) {
+      // Some SVG text implementations cannot measure every glyph; fall back to
+      // the hit character index in that case.
+    }
     return idx;
   }
   const r = node.getBoundingClientRect();
@@ -233,11 +236,11 @@ function measureSvgPrefixPx(node, prefixLen) {
   const full = node.textContent || "";
   if (!full) return 0;
   const clamped = Math.min(prefixLen, full.length);
-  let fullUserLen = 0;
+  let fullUserLen;
   try { fullUserLen = node.getComputedTextLength(); } catch (_) { fullUserLen = 0; }
   const rWidth = node.getBoundingClientRect().width;
   if (!fullUserLen || !rWidth) return rWidth * (clamped / full.length);
-  let prefixUserLen = 0;
+  let prefixUserLen;
   try { prefixUserLen = node.getSubStringLength(0, clamped); }
   catch (_) { prefixUserLen = fullUserLen * (clamped / full.length); }
   return (prefixUserLen / fullUserLen) * rWidth;

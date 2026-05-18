@@ -128,8 +128,17 @@ The package also ships an Agent Skill (`skills/html-editor/SKILL.md`). Once inst
 
 ## Run / develop / test
 
+The local editor runtime is still Python-only. Development checks use Node
+`>=20.19` for ESLint/Playwright and Ruff `0.15.13` for Python linting;
+`scripts/ruff.sh` uses a matching installed `ruff` first, then falls back to
+pinned `uvx --from ruff==0.15.13 ruff`.
+
 ```bash
-./scripts/check.sh            # syntax + fast unit tests
+npm install                   # once: installs Playwright + ESLint dev deps
+# Optional if you do not have uv and want a local Ruff install:
+# python3 -m pip install -r requirements-dev.txt
+./scripts/check.sh            # ESLint + Ruff + syntax + fast unit tests
+npm run lint                  # ESLint for JS + Ruff for Python
 ./scripts/test.sh --fast      # unit tests only (sub-second)
 ./scripts/test.sh             # unit tests + headless Playwright e2e
 ./scripts/test.sh --ui        # unit tests + Playwright UI runner
@@ -151,7 +160,7 @@ The server injects a small overlay (one CSS link + one ES module script tag) int
   - `table_ops.py` rectangular table geometry + row/column mutations
   - `history.py` thread-safe undo/redo over disk snapshots
   - `comments.py` comment store + Pi-extension JSONL bridge
-  - `assets.py` reads `client/*.js` and `styles/*.css` at import time
+  - `assets.py` serves `client/*.js` and concatenates `styles/*.css` on demand
 - `client/*.js` — native ES modules served at `/__editor/client/<name>.js`; only `main.js` is referenced from the host page.
 - `styles/*.css` — overlay styles concatenated in filename order and served at `/__editor/main.css`.
 - `extensions/html-editor-comments.ts` — optional Pi extension (the session bridge).

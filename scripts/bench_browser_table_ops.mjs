@@ -81,7 +81,7 @@ function fixtureHtml(rows, cols) {
   for (let r = 0; r < rows; r += 1) {
     body.push("<tr>");
     for (let c = 0; c < cols; c += 1) {
-      body.push(`<td data-edit-id=\"cell-${r}-${c}\">R${r}C${c}</td>`);
+      body.push(`<td data-edit-id="cell-${r}-${c}">R${r}C${c}</td>`);
     }
     body.push("</tr>");
   }
@@ -109,7 +109,7 @@ async function startEditor() {
     await waitForServer(url);
   } catch (err) {
     proc.kill();
-    throw new Error(`${err.message}\n${stderr}`);
+    throw new Error(`${err.message}\n${stderr}`, { cause: err });
   }
   return {
     url,

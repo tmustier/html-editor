@@ -147,7 +147,6 @@ test.describe("HTML inline text editing", () => {
       await waitForEditor(page);
 
       const mixed = page.locator('p:has-text("mixed paragraph")');
-      const id = await mixed.getAttribute("data-edit-id");
       await mixed.click();
       // Append text to the end (don't blow away the inline structure).
       await page.keyboard.press("End");

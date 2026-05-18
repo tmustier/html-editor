@@ -16,7 +16,7 @@ async function postJson(path, body) {
       body: JSON.stringify(body),
     });
   } catch (e) {
-    throw new Error("network error");
+    throw new Error("network error", { cause: e });
   }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -30,7 +30,7 @@ async function getJson(path) {
   try {
     res = await fetch(path);
   } catch (e) {
-    throw new Error("network error");
+    throw new Error("network error", { cause: e });
   }
   if (!res.ok) {
     throw new Error(`HTTP ${res.status}`);

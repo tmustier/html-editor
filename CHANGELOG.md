@@ -6,6 +6,12 @@ All notable changes to `html-editor` are documented here. The format follows
 
 ## Unreleased
 
+### Added
+
+- Added correctness-focused linting: ESLint for browser/test/benchmark JS,
+  pinned Ruff (`0.15.13`) for Python, shared `npm run lint`, and
+  `./scripts/check.sh` now runs lint before syntax and unit checks.
+
 ## 0.2.0 — 2026-05-18
 
 ### Added

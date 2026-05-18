@@ -7,7 +7,7 @@
 // rendering, and the toolbar-placement code.
 
 import { INLINE_TEXT_TAGS } from "./config.js";
-import { dom, flash, isOverlay, rectOf } from "./dom.js";
+import { dom, flash, rectOf } from "./dom.js";
 import { state } from "./state.js";
 import {
   gridCellFrom,

@@ -21,8 +21,7 @@ from pathlib import Path
 from typing import Callable, Optional
 from urllib.parse import urlparse
 
-from . import document
-from . import assets
+from . import assets, document
 from .comments import DEFAULT_BRIDGE_FILE, CommentStore
 from .history import History
 

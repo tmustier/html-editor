@@ -2,14 +2,8 @@ import { test, expect } from "@playwright/test";
 import { startEditor, waitForEditor } from "./helpers.js";
 import {
   cmdArrow,
-  expectNoReload,
-  persistedFirstTableRows,
-  rangeBounds,
-  rangeCellTexts,
-  readCellText,
   selectCell,
   selectedText,
-  setReloadMarker,
 } from "./table-helpers.js";
 
 test.describe("table keyboard navigation and selection", () => {
@@ -266,19 +260,4 @@ test.describe("table keyboard navigation and selection", () => {
       await editor.cleanup();
     }
   });
-
-  // ------------------------------------------------------------------
-  // v0.1.7: actions on a multi-cell range (copy / paste / clear / cut)
-  // ------------------------------------------------------------------
-
-  async function rangeCellTexts(page) {
-    return await page.evaluate(() => window.__edit.rangeCells());
-  }
-
-  async function readCellText(page, editId) {
-    return await page.evaluate((id) => {
-      const el = document.querySelector(`[data-edit-id="${id}"]`);
-      return el ? (el.innerText || el.textContent || "").trim() : null;
-    }, editId);
-  }
 });

@@ -3,14 +3,22 @@
   "private": true,
   "type": "module",
   "description": "Local HTML collaboration editor with optional Pi session comment bridge.",
+  "engines": {
+    "node": ">=20.19"
+  },
   "scripts": {
     "test": "./scripts/test.sh",
     "test:fast": "./scripts/test.sh --fast",
     "e2e": "playwright test",
+    "lint": "npm run lint:js && npm run lint:py",
+    "lint:js": "eslint client/ tests/e2e/ scripts/*.mjs playwright.config.js eslint.config.js",
+    "lint:py": "./scripts/ruff.sh check serve.py server/ tests/ scripts/*.py",
     "bench:browser": "node scripts/bench_browser_table_ops.mjs"
   },
   "devDependencies": {
-    "@playwright/test": "^1.49.1"
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.49.1",
+    "eslint": "^10.4.0"
   },
   "keywords": [
     "pi-package",

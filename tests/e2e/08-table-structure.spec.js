@@ -1,12 +1,8 @@
 import { test, expect } from "@playwright/test";
 import { startEditor, waitForEditor } from "./helpers.js";
 import {
-  cmdArrow,
   expectNoReload,
   persistedFirstTableRows,
-  rangeBounds,
-  rangeCellTexts,
-  readCellText,
   selectCell,
   selectedText,
   setReloadMarker,
@@ -518,12 +514,4 @@ test.describe("table structure operations", () => {
       await editor.cleanup();
     }
   });
-
-  // -----------------------------------------------------------------------
-  // v0.1.6: Excel-style cell range selection + row/column promotion
-  // -----------------------------------------------------------------------
-
-  async function rangeBounds(page) {
-    return await page.evaluate(() => window.__edit.tableRange());
-  }
 });

@@ -74,7 +74,7 @@ export async function startEditor(fixtureName) {
     await waitForServer(url);
   } catch (e) {
     proc.kill();
-    throw new Error("server failed to start: " + stderr);
+    throw new Error("server failed to start: " + stderr, { cause: e });
   }
 
   return {
@@ -85,7 +85,10 @@ export async function startEditor(fixtureName) {
     cleanup: async () => {
       proc.kill();
       await new Promise((r) => setTimeout(r, 100));
-      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) {}
+      try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) {
+        // Temp cleanup is best-effort; tests should report the editor failure,
+        // not fail because macOS kept a file handle open for a moment.
+      }
     },
   };
 }
