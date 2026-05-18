@@ -16,6 +16,7 @@ import {
 } from "./cut.js";
 import { finishActiveEdit, finishSvgLabelEdit, startEdit } from "./editing.js";
 import { state } from "./state.js";
+import { runTableOperation, tableRestoreModeForAction } from "./tableops.js";
 import {
   editableFrom,
   ensureVisible,
@@ -151,7 +152,11 @@ function updateAddZonesFromHover() {
 }
 
 function tableForAppend() {
-  return state.hoveredTable
+  const hovered = state.hoveredTable && document.contains(state.hoveredTable)
+    ? state.hoveredTable
+    : null;
+  if (!hovered && state.hoveredTable) state.hoveredTable = null;
+  return hovered
     || (state.selected && (gridCellFrom(state.selected)?.closest("table")))
     || null;
 }
@@ -178,18 +183,13 @@ async function appendTableLine(axis) {
     return;
   }
   const action = axis === "row" ? "row-insert-after" : "col-insert-after";
-  try {
-    const result = await api.tableOperation(cell.getAttribute("data-edit-id"), action);
-    if (result.selection_id) {
-      sessionStorage.setItem("__edit_restore_selection", result.selection_id);
-      sessionStorage.setItem("__edit_restore_table_mode", axis);
-    }
-    flash(axis === "row" ? "Row added." : "Column added.",
-      { kind: "success", timeout: 1200 });
-    reloadAfterMutation({ delay: 200 });
-  } catch (err) {
-    flash("Add failed: " + err.message, { kind: "error", timeout: 3000 });
-  }
+  if (state.cut) clearCut();
+  await runTableOperation(cell, action, {
+    restoreMode: axis,
+    successMessage: axis === "row" ? "Row added." : "Column added.",
+    errorPrefix: "Add failed",
+    reloadDelay: 200,
+  });
 }
 
 function insertOrDeleteLine(action) {
@@ -239,22 +239,13 @@ async function performTableOperation(action) {
     flash("Select a table cell first.", { kind: "warning" });
     return;
   }
-  try {
-    const result = await api.tableOperation(cell.getAttribute("data-edit-id"), action);
-    if (result.selection_id) {
-      sessionStorage.setItem("__edit_restore_selection", result.selection_id);
-      const restoreMode = action.startsWith("row-")
-        ? "row"
-        : action.startsWith("col-") ? "column" : (state.tableSelectionMode || "");
-      if (restoreMode) sessionStorage.setItem("__edit_restore_table_mode", restoreMode);
-      else sessionStorage.removeItem("__edit_restore_table_mode");
-    }
-    const label = action.replace(/-/g, " ");
-    flash(`Table ${label} done.`, { kind: "success" });
-    reloadAfterMutation({ delay: 220 });
-  } catch (err) {
-    flash("Table change failed: " + err.message, { kind: "error", timeout: 3600 });
-  }
+  if (state.cut) clearCut();
+  await runTableOperation(cell, action, {
+    restoreMode: tableRestoreModeForAction(action, state.tableSelectionMode || ""),
+    successMessage: `Table ${action.replace(/-/g, " ")} done.`,
+    errorPrefix: "Table change failed",
+    reloadDelay: 220,
+  });
 }
 
 async function performDuplicate() {

@@ -28,6 +28,17 @@ test.describe("keyboard navigation + adversarial flows", () => {
         cellMatch[1].replace(/<[^>]*>/g, "").trim()));
   }
 
+  async function setReloadMarker(page) {
+    await page.evaluate(() => { window.__tableReloadMarker = crypto.randomUUID(); });
+    return await page.evaluate(() => window.__tableReloadMarker);
+  }
+
+  async function expectNoReload(page, marker) {
+    await waitForEditor(page);
+    await page.waitForTimeout(350);
+    expect(await page.evaluate(() => window.__tableReloadMarker)).toBe(marker);
+  }
+
   async function cmdArrow(page, key) {
     await page.keyboard.down("Meta");
     await page.keyboard.press(key);
@@ -264,7 +275,7 @@ test.describe("keyboard navigation + adversarial flows", () => {
     }
   });
 
-  test("toolbar table menu inserts rows and restores selection after reload", async ({ page }) => {
+  test("toolbar table menu inserts rows and restores selection without reload", async ({ page }) => {
     const editor = await startEditor("table-grid.html");
     try {
       await page.goto(editor.url);
@@ -273,10 +284,12 @@ test.describe("keyboard navigation + adversarial flows", () => {
       await selectCell(page, "Epsilon");
       await page.locator('#__edit_toolbar [data-act="table"]').click();
       await expect(page.locator("#__edit_tablemenu")).toBeVisible();
+      const marker = await setReloadMarker(page);
       await page.locator('#__edit_tablemenu [data-table-act="row-insert-after"]').click();
 
       await page.waitForFunction(() =>
         window.__edit && document.querySelectorAll('table[data-edit-id="e2"] tr').length === 4);
+      await expectNoReload(page, marker);
       const rows = await page.locator('table[data-edit-id="e2"] tr').evaluateAll((trs) =>
         trs.map((tr) => Array.from(tr.cells).map((td) => td.textContent.trim())));
       expect(rows).toEqual([
@@ -287,6 +300,7 @@ test.describe("keyboard navigation + adversarial flows", () => {
       ]);
       expect(await selectedText(page)).toBe("");
       expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("row");
+      expect(persistedFirstTableRows(editor.readFile())).toEqual(rows);
       expect(editor.readFile()).toMatch(/<td data-edit-id="e\d+"><\/td>/);
     } finally {
       await editor.cleanup();
@@ -301,10 +315,12 @@ test.describe("keyboard navigation + adversarial flows", () => {
 
       await selectCell(page, "Epsilon");
       await page.locator('#__edit_toolbar [data-act="table"]').click();
+      const marker = await setReloadMarker(page);
       await page.locator('#__edit_tablemenu [data-table-act="col-insert-before"]').click();
 
       await page.waitForFunction(() =>
         window.__edit && document.querySelector('table[data-edit-id="e2"] tr')?.cells.length === 4);
+      await expectNoReload(page, marker);
       const rows = await page.locator('table[data-edit-id="e2"] tr').evaluateAll((trs) =>
         trs.map((tr) => Array.from(tr.cells).map((td) => td.textContent.trim())));
       expect(rows).toEqual([
@@ -314,6 +330,7 @@ test.describe("keyboard navigation + adversarial flows", () => {
       ]);
       expect(await selectedText(page)).toBe("");
       expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("column");
+      expect(persistedFirstTableRows(editor.readFile())).toEqual(rows);
     } finally {
       await editor.cleanup();
     }
@@ -327,9 +344,11 @@ test.describe("keyboard navigation + adversarial flows", () => {
 
       await selectCell(page, "Epsilon");
       await page.locator('#__edit_toolbar [data-act="table"]').click();
+      let marker = await setReloadMarker(page);
       await page.locator('#__edit_tablemenu [data-table-act="row-delete"]').click();
       await page.waitForFunction(() =>
         window.__edit && document.querySelectorAll('table[data-edit-id="e2"] tr').length === 2);
+      await expectNoReload(page, marker);
       let rows = await page.locator('table[data-edit-id="e2"] tr').evaluateAll((trs) =>
         trs.map((tr) => Array.from(tr.cells).map((td) => td.textContent.trim())));
       expect(rows).toEqual([
@@ -338,6 +357,7 @@ test.describe("keyboard navigation + adversarial flows", () => {
       ]);
       expect(await selectedText(page)).toBe("Theta");
       expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("row");
+      expect(persistedFirstTableRows(editor.readFile())).toEqual(rows);
 
       // v0.1.6: row + Ctrl+Space promotes to whole-table mode. To switch to
       // column mode we step back to the cell first, then Ctrl+Space.
@@ -346,9 +366,11 @@ test.describe("keyboard navigation + adversarial flows", () => {
       await page.keyboard.press("Control+Space");
       expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("column");
       await page.locator('#__edit_toolbar [data-act="table"]').click();
+      marker = await setReloadMarker(page);
       await page.locator('#__edit_tablemenu [data-table-act="col-delete"]').click();
       await page.waitForFunction(() =>
         window.__edit && document.querySelector('table[data-edit-id="e2"] tr')?.cells.length === 2);
+      await expectNoReload(page, marker);
       rows = await page.locator('table[data-edit-id="e2"] tr').evaluateAll((trs) =>
         trs.map((tr) => Array.from(tr.cells).map((td) => td.textContent.trim())));
       expect(rows).toEqual([
@@ -356,6 +378,7 @@ test.describe("keyboard navigation + adversarial flows", () => {
         ["Eta", "Iota"],
       ]);
       expect(await selectedText(page)).toBe("Iota");
+      expect(persistedFirstTableRows(editor.readFile())).toEqual(rows);
     } finally {
       await editor.cleanup();
     }
@@ -584,9 +607,11 @@ test.describe("keyboard navigation + adversarial flows", () => {
       // Hover over a cell so the "+" zones arm via proximity.
       await page.locator('td:text-is("Epsilon")').hover();
       await expect(page.locator("#__edit_table_add_col")).toHaveAttribute("data-visible", "true");
+      const marker = await setReloadMarker(page);
       await page.locator("#__edit_table_add_col").click();
       await page.waitForFunction(() =>
         window.__edit && document.querySelector('table[data-edit-id="e2"] tr')?.cells.length === 4);
+      await expectNoReload(page, marker);
       const rows = await page.locator('table[data-edit-id="e2"] tr').evaluateAll((trs) =>
         trs.map((tr) => Array.from(tr.cells).map((td) => td.textContent.trim())));
       expect(rows).toEqual([
@@ -595,6 +620,7 @@ test.describe("keyboard navigation + adversarial flows", () => {
         ["Eta", "Theta", "Iota", ""],
       ]);
       expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("column");
+      expect(persistedFirstTableRows(editor.readFile())).toEqual(rows);
     } finally {
       await editor.cleanup();
     }
@@ -630,9 +656,11 @@ test.describe("keyboard navigation + adversarial flows", () => {
       await selectCell(page, "Epsilon");
       await page.locator('td:text-is("Epsilon")').hover();
       await expect(page.locator("#__edit_table_add_row")).toHaveAttribute("data-visible", "true");
+      const marker = await setReloadMarker(page);
       await page.locator("#__edit_table_add_row").click();
       await page.waitForFunction(() =>
         window.__edit && document.querySelectorAll('table[data-edit-id="e2"] tr').length === 4);
+      await expectNoReload(page, marker);
       const rows = await page.locator('table[data-edit-id="e2"] tr').evaluateAll((trs) =>
         trs.map((tr) => Array.from(tr.cells).map((td) => td.textContent.trim())));
       expect(rows).toEqual([
@@ -642,6 +670,7 @@ test.describe("keyboard navigation + adversarial flows", () => {
         ["", "", ""],
       ]);
       expect(await page.evaluate(() => window.__edit.selectionMode())).toBe("row");
+      expect(persistedFirstTableRows(editor.readFile())).toEqual(rows);
     } finally {
       await editor.cleanup();
     }
@@ -722,6 +751,28 @@ test.describe("keyboard navigation + adversarial flows", () => {
       await selectCell(page, "Alpha");
       await page.keyboard.press("Meta+C");
       await page.waitForFunction(() => window.__edit.cut() === null);
+      await expect(page.locator("#__edit_cut")).toBeHidden();
+    } finally {
+      await editor.cleanup();
+    }
+  });
+
+  test("structural table ops cancel a staged cut before replacing the table", async ({ page }) => {
+    const editor = await startEditor("table-grid.html");
+    try {
+      await page.goto(editor.url);
+      await waitForEditor(page);
+      await selectCell(page, "Delta");
+      await page.keyboard.press("Shift+Space");
+      await page.keyboard.press("Meta+X");
+      await page.waitForFunction(() => window.__edit.cut()?.kind === "row");
+      await selectCell(page, "Alpha");
+      await page.locator('#__edit_toolbar [data-act="table"]').click();
+      const marker = await setReloadMarker(page);
+      await page.locator('#__edit_tablemenu [data-table-act="row-insert-after"]').click();
+      await page.waitForFunction(() => document.querySelectorAll('table[data-edit-id="e2"] tr').length === 4);
+      await expectNoReload(page, marker);
+      expect(await page.evaluate(() => window.__edit.cut())).toBeNull();
       await expect(page.locator("#__edit_cut")).toBeHidden();
     } finally {
       await editor.cleanup();

@@ -2,8 +2,8 @@
 // Browser-side performance benchmark for table operations.
 //
 // Measures the user-visible pieces that the Python-only benchmark cannot see:
-// API roundtrip time, browser reload/editor re-init cost, and reload-free
-// client-side row/column move latency.
+// API roundtrip time plus reload-free browser DOM application latency for
+// table insert and move operations.
 
 import { chromium } from "@playwright/test";
 import { spawn } from "node:child_process";
@@ -143,19 +143,26 @@ async function timeSample(browser, fn) {
   }
 }
 
-async function insertWithReload(page, action) {
+async function insertWithSnapshot(page, action, axis) {
+  const marker = crypto.randomUUID();
   const id = `cell-${Math.floor(ROWS / 2)}-${Math.floor(COLS / 2)}`;
-  const t0 = performance.now();
-  await page.evaluate(async ({ id, action }) => {
+  await page.evaluate((marker) => { window.__benchReloadMarker = marker; }, marker);
+  const sample = await page.evaluate(async ({ id, action, axis }) => {
     const { api } = await import("/__editor/client/api.js");
-    await api.tableOperation(id, action);
-  }, { id, action });
-  const apiMs = performance.now() - t0;
-  const t1 = performance.now();
-  await page.reload({ waitUntil: "domcontentloaded" });
-  await waitForEditor(page);
-  const reloadMs = performance.now() - t1;
-  return { apiMs, reloadMs, totalMs: apiMs + reloadMs };
+    const { applyTableSnapshot } = await import("/__editor/client/tableops.js");
+    const t0 = performance.now();
+    const result = await api.tableOperation(id, action, { include_table_html: true });
+    const apiMs = performance.now() - t0;
+    const t1 = performance.now();
+    const applied = applyTableSnapshot(result, axis);
+    const applyMs = performance.now() - t1;
+    if (!applied) throw new Error(`${action} table snapshot apply failed`);
+    return { apiMs, applyMs, totalMs: apiMs + applyMs };
+  }, { id, action, axis });
+  await page.waitForTimeout(350);
+  const persistedMarker = await page.evaluate(() => window.__benchReloadMarker);
+  if (persistedMarker !== marker) throw new Error(`${action} unexpectedly reloaded the page`);
+  return { ...sample, reloadMs: 0 };
 }
 
 async function moveWithoutReload(page, axis) {
@@ -179,8 +186,8 @@ async function moveWithoutReload(page, axis) {
 }
 
 const ops = [
-  ["row-insert-after api+reload", (page) => insertWithReload(page, "row-insert-after")],
-  ["col-insert-after api+reload", (page) => insertWithReload(page, "col-insert-after")],
+  ["row-insert-after snapshot", (page) => insertWithSnapshot(page, "row-insert-after", "row")],
+  ["col-insert-after snapshot", (page) => insertWithSnapshot(page, "col-insert-after", "column")],
   ["row-move-to client-dom", (page) => moveWithoutReload(page, "row")],
   ["col-move-to client-dom", (page) => moveWithoutReload(page, "column")],
 ];

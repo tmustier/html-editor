@@ -471,6 +471,7 @@ def table_operation(
     *,
     target_index: Optional[int] = None,
     mode: str = "before",
+    include_table_html: bool = False,
 ) -> tuple[bool, dict]:
     if action not in TABLE_ACTIONS:
         return False, {"status": 400, "error":
@@ -619,12 +620,16 @@ def table_operation(
         selection = cell
 
     selection_id = selection.get("data-edit-id") if selection else None
-    return True, {
+    result = {
         "ok": True,
         "action": action,
         "cell_id": cell_id,
         "selection_id": selection_id,
     }
+    if include_table_html:
+        result["table_id"] = table.get("data-edit-id")
+        result["table_html"] = str(table)
+    return True, result
 
 
 def duplicate_element(

@@ -288,6 +288,7 @@ def make_handler(
             action = (payload or {}).get("action")
             target_index_raw = (payload or {}).get("target_index")
             mode = (payload or {}).get("mode") or "before"
+            include_table_html = (payload or {}).get("include_table_html") is True
             if not cell_id or not action:
                 self._send_json(400, {"error": "expected cell_id and action"})
                 return
@@ -301,7 +302,8 @@ def make_handler(
             ok, result = self._mutate_document(
                 lambda soup: document.table_operation(
                     soup, str(cell_id), str(action),
-                    target_index=target_index, mode=str(mode)))
+                    target_index=target_index, mode=str(mode),
+                    include_table_html=include_table_html))
             if not ok:
                 self._send_result(ok, result)
                 return

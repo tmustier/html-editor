@@ -10,6 +10,7 @@ import { api } from "./api.js";
 import { dom, flash } from "./dom.js";
 import { reloadAfterMutation } from "./interaction.js";
 import { state } from "./state.js";
+import { applyTableSnapshot } from "./tableops.js";
 import {
   dropSlotFor,
   ensureVisible,
@@ -183,7 +184,14 @@ export async function runMoveTo(axis, cellId, targetIndex, mode) {
   try {
     localOk = applyMoveToDom(axis, cellId, targetIndex, mode, result.selection_id);
   } catch (err) {
-    console.warn("html-editor: local table move apply failed; reloading", err);
+    console.warn("html-editor: local table move apply failed; trying table snapshot", err);
+  }
+  if (!localOk) {
+    try {
+      localOk = applyTableSnapshot(result, axis);
+    } catch (err) {
+      console.warn("html-editor: table snapshot apply failed; reloading", err);
+    }
   }
   flash(axis === "row" ? "Row moved." : "Column moved.",
     { kind: "success", timeout: 1200 });
