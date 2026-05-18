@@ -60,7 +60,28 @@ def is_text_editable(el: Optional[Tag]) -> bool:
     return all((not is_inside_svg(c)) and c.name in INLINE_TEXT_TAGS for c in child_tags)
 
 
-def find_by_edit_id(soup: BeautifulSoup, edit_id: str) -> Optional[Tag]:
+def edit_id_index(soup: BeautifulSoup) -> dict[str, Tag]:
+    """Return a one-pass data-edit-id lookup table for batch mutations.
+
+    BeautifulSoup's ``find(attrs={...})`` is a full-tree scan. That is fine for
+    one-off mutations but turns large range/table pastes into O(updates *
+    nodes). Build this once for batch work and use plain dict lookups instead.
+    """
+    by_id: dict[str, Tag] = {}
+    for el in soup.find_all(attrs={"data-edit-id": True}):
+        # Preserve BeautifulSoup.find() semantics for malformed/source HTML
+        # with duplicate ids: first element wins.
+        by_id.setdefault(str(el["data-edit-id"]), el)
+    return by_id
+
+
+def find_by_edit_id(
+    soup: BeautifulSoup,
+    edit_id: str,
+    index: Optional[dict[str, Tag]] = None,
+) -> Optional[Tag]:
+    if index is not None:
+        return index.get(str(edit_id))
     return soup.find(attrs={"data-edit-id": edit_id})
 
 
@@ -253,18 +274,7 @@ def smart_update_svg_text(text_node: Tag, new_text: str) -> bool:
 # "status": int}. On ok=True, payload is a JSON-serialisable dict. The routes
 # layer turns these into HTTP responses.
 
-def update_text(
-    soup: BeautifulSoup,
-    edit_id: str,
-    new_text: str,
-    new_html: Optional[str],
-) -> tuple[bool, dict]:
-    el = find_by_edit_id(soup, edit_id)
-    if el is None:
-        return False, {"status": 404, "error": f"id {edit_id} not found"}
-    if not is_text_editable(el):
-        return False, {"status": 400, "error":
-            "structural components can't be text-edited; select text inside the component"}
+def _apply_text_update(el: Tag, new_text: str, new_html: Optional[str]) -> None:
     el.clear()
     if isinstance(new_html, str):
         fragment = BeautifulSoup(new_html, "html.parser")
@@ -272,6 +282,22 @@ def update_text(
             el.append(child)
     else:
         el.append(NavigableString(new_text))
+
+
+def update_text(
+    soup: BeautifulSoup,
+    edit_id: str,
+    new_text: str,
+    new_html: Optional[str],
+    index: Optional[dict[str, Tag]] = None,
+) -> tuple[bool, dict]:
+    el = find_by_edit_id(soup, edit_id, index=index)
+    if el is None:
+        return False, {"status": 404, "error": f"id {edit_id} not found"}
+    if not is_text_editable(el):
+        return False, {"status": 400, "error":
+            "structural components can't be text-edited; select text inside the component"}
+    _apply_text_update(el, new_text, new_html)
     return True, {"ok": True, "tag": el.name}
 
 
@@ -281,26 +307,38 @@ def update_text_many(
 ) -> tuple[bool, dict]:
     if not isinstance(updates, list) or not updates:
         return False, {"status": 400, "error": "expected non-empty updates[]"}
-    applied = []
-    for index, update in enumerate(updates):
+
+    by_id = edit_id_index(soup)
+    pending: list[tuple[str, Tag, str, Optional[str]]] = []
+    for update_index, update in enumerate(updates):
         if not isinstance(update, dict):
             return False, {"status": 400, "error":
-                f"update {index} must be an object"}
+                f"update {update_index} must be an object"}
         edit_id = update.get("id")
         if not edit_id:
             return False, {"status": 400, "error":
-                f"update {index} is missing id"}
+                f"update {update_index} is missing id"}
+        edit_id = str(edit_id)
+        el = by_id.get(edit_id)
+        if el is None:
+            return False, {"status": 404, "error":
+                f"update {update_index} ({edit_id}) failed: id {edit_id} not found"}
+        if not is_text_editable(el):
+            return False, {"status": 400, "error":
+                f"update {update_index} ({edit_id}) failed: "
+                "structural components can't be text-edited; select text inside the component"}
         html = update.get("html")
-        ok, result = update_text(
-            soup,
-            str(edit_id),
+        pending.append((
+            edit_id,
+            el,
             str(update.get("text", "")),
             html if isinstance(html, str) else None,
-        )
-        if not ok:
-            prefix = f"update {index} ({edit_id}) failed: "
-            return False, {**result, "error": prefix + result.get("error", "unknown error")}
-        applied.append({"id": edit_id, "tag": result.get("tag")})
+        ))
+
+    applied = []
+    for edit_id, el, text, html in pending:
+        _apply_text_update(el, text, html)
+        applied.append({"id": edit_id, "tag": el.name})
     return True, {"ok": True, "count": len(applied), "updates": applied}
 
 

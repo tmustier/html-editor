@@ -480,14 +480,14 @@ export function tableLineRects(cell, axis) {
 // Given a viewport-space pointer, find the row/column drop slot relative to
 // the table the source cell belongs to. Returns { axis, targetIndex, mode,
 // rect, sourceIndex } or null.
-export function dropSlotFor(sourceCell, axis, clientX, clientY) {
-  const info = tableLineRects(sourceCell, axis);
+export function dropSlotFor(sourceCell, axis, clientX, clientY, cachedInfo = null) {
+  const info = cachedInfo || tableLineRects(sourceCell, axis);
   if (!info || !info.lines.length) return null;
   const x = clientX + window.scrollX;
   const y = clientY + window.scrollY;
-  const sourceIndex = axis === "row"
+  const sourceIndex = info.sourceIndex ?? (axis === "row"
     ? tableRowIndexOf(sourceCell)?.index
-    : gridForCell(sourceCell)?.position.col;
+    : gridForCell(sourceCell)?.position.col);
   let best = null;
   for (const { index, rect } of info.lines) {
     if (axis === "row") {

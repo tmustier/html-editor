@@ -263,6 +263,28 @@ class UpdateTextMany(unittest.TestCase):
         self.assertFalse(ok)
         self.assertEqual(result["status"], 400)
 
+    def test_rejects_missing_id_without_partial_mutation(self):
+        s = soup(
+            '<table><tr>'
+            '<td data-edit-id="e1">A</td><td data-edit-id="e2">B</td>'
+            '</tr></table>')
+        ok, result = D.update_text_many(s, [
+            {"id": "e1", "text": "One"},
+            {"id": "missing", "text": "Two"},
+        ])
+        self.assertFalse(ok)
+        self.assertEqual(result["status"], 404)
+        self.assertEqual([td.get_text() for td in s.find_all("td")], ["A", "B"])
+
+    def test_batch_lookup_matches_single_update_when_ids_are_duplicated(self):
+        s = soup(
+            '<table><tr>'
+            '<td data-edit-id="dup">A</td><td data-edit-id="dup">B</td>'
+            '</tr></table>')
+        ok, result = D.update_text_many(s, [{"id": "dup", "text": "One"}])
+        self.assertTrue(ok)
+        self.assertEqual([td.get_text() for td in s.find_all("td")], ["One", "B"])
+
 
 # --- table_operation -------------------------------------------------------
 

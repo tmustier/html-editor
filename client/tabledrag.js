@@ -14,6 +14,7 @@ import {
   dropSlotFor,
   gridCellFrom,
   gridForElement,
+  tableLineRects,
   tableRowIndexOf,
 } from "./targets.js";
 
@@ -59,12 +60,18 @@ export function beginTableLineDrag(axis, event) {
   if (!cell || !["row", "column"].includes(axis)) return;
   event.preventDefault();
   event.stopPropagation();
+  const grid = gridForElement(state.selected);
+  const sourceIndex = axis === "row"
+    ? tableRowIndexOf(cell)?.index
+    : grid?.position.col;
+  const lineInfo = tableLineRects(cell, axis);
   state.dragging = {
     mode: "table-line",
     axis,
     cell,
     cellId: cell.getAttribute("data-edit-id"),
     table: cell.closest("table"),
+    lineInfo: lineInfo ? { ...lineInfo, sourceIndex } : null,
     slot: null,
   };
   document.documentElement.classList.add("__edit_dragging-line");
@@ -79,7 +86,7 @@ function updateLineDrag(event) {
   if (!state.dragging || state.dragging.mode !== "table-line") return;
   event.preventDefault();
   const slot = dropSlotFor(state.dragging.cell, state.dragging.axis,
-    event.clientX, event.clientY);
+    event.clientX, event.clientY, state.dragging.lineInfo);
   state.dragging.slot = slot;
   showDropIndicator(slot);
 }

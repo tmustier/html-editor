@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import sys
+import threading
 import time
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
@@ -67,6 +68,7 @@ def make_handler(
     """
     history = History(html_path)
     comment_store = CommentStore(comments_path, bridge_path=bridge_path)
+    mutation_lock = threading.RLock()
 
     class Handler(BaseHTTPRequestHandler):
         # Quiet the default access log; we print our own structured events.
@@ -100,6 +102,16 @@ def make_handler(
                 status = payload.pop("status", 400)
                 self._send_json(status, payload)
 
+        def _mutate_document(self, mutate: Callable) -> tuple[bool, dict]:
+            """Run one read/mutate/history/save sequence under a document lock."""
+            with mutation_lock:
+                soup = document.load_soup(html_path)
+                ok, result = mutate(soup)
+                if ok:
+                    history.remember()
+                    document.save_soup(html_path, soup)
+                return ok, result
+
         # ---- routes ----
         def _send_bytes(self, body: bytes, content_type: str) -> None:
             self.send_response(200)
@@ -112,7 +124,8 @@ def make_handler(
         def do_GET(self):  # noqa: N802
             url = urlparse(self.path)
             if url.path in ("/", "/index.html"):
-                soup = document.ensure_edit_ids(html_path)
+                with mutation_lock:
+                    soup = document.ensure_edit_ids(html_path)
                 self._send_bytes(
                     _inject_overlay(soup).encode("utf-8"),
                     "text/html; charset=utf-8")
@@ -169,13 +182,11 @@ def make_handler(
             if not edit_id:
                 self._send_json(400, {"error": "missing id"})
                 return
-            soup = document.load_soup(html_path)
-            ok, result = document.update_text(soup, edit_id, text, html)
+            ok, result = self._mutate_document(
+                lambda soup: document.update_text(soup, edit_id, text, html))
             if not ok:
                 self._send_result(ok, result)
                 return
-            history.remember()
-            document.save_soup(html_path, soup)
             excerpt = text.strip().replace("\n", " ")[:80]
             sys.stderr.write(
                 f"[edit] saved text for {edit_id} <{result['tag']}>: "
@@ -185,13 +196,11 @@ def make_handler(
 
         def _save_text_many(self, payload):
             updates = (payload or {}).get("updates")
-            soup = document.load_soup(html_path)
-            ok, result = document.update_text_many(soup, updates)
+            ok, result = self._mutate_document(
+                lambda soup: document.update_text_many(soup, updates))
             if not ok:
                 self._send_result(ok, result)
                 return
-            history.remember()
-            document.save_soup(html_path, soup)
             sys.stderr.write(f"[edit-many] saved {result['count']} text cells\n")
             sys.stderr.flush()
             self._send_json(200, result)
@@ -202,13 +211,11 @@ def make_handler(
             if not edit_id or not isinstance(lines, list):
                 self._send_json(400, {"error": "expected id and lines[]"})
                 return
-            soup = document.load_soup(html_path)
-            ok, result = document.update_svg_labels(soup, edit_id, lines)
+            ok, result = self._mutate_document(
+                lambda soup: document.update_svg_labels(soup, edit_id, lines))
             if not ok:
                 self._send_result(ok, result)
                 return
-            history.remember()
-            document.save_soup(html_path, soup)
             excerpt = " | ".join(str(x).strip() for x in lines)[:120]
             sys.stderr.write(
                 f"[edit-svg] saved labels for {edit_id}: {excerpt!r}"
@@ -225,13 +232,11 @@ def make_handler(
                 self._send_json(400, {"error":
                     "expected id, target_id, position=before|after"})
                 return
-            soup = document.load_soup(html_path)
-            ok, result = document.move_element(soup, edit_id, target_id, position)
+            ok, result = self._mutate_document(
+                lambda soup: document.move_element(soup, edit_id, target_id, position))
             if not ok:
                 self._send_result(ok, result)
                 return
-            history.remember()
-            document.save_soup(html_path, soup)
             sys.stderr.write(f"[move] {edit_id} {position} {target_id}\n")
             sys.stderr.flush()
             self._send_json(200, result)
@@ -248,13 +253,11 @@ def make_handler(
             if not edit_id:
                 self._send_json(400, {"error": "missing id"})
                 return
-            soup = document.load_soup(html_path)
-            ok, result = document.move_svg(soup, edit_id, tx, ty)
+            ok, result = self._mutate_document(
+                lambda soup: document.move_svg(soup, edit_id, tx, ty))
             if not ok:
                 self._send_result(ok, result)
                 return
-            history.remember()
-            document.save_soup(html_path, soup)
             sys.stderr.write(
                 f"[move-svg] {edit_id} translate({tx:.2f} {ty:.2f})\n")
             sys.stderr.flush()
@@ -265,19 +268,17 @@ def make_handler(
             if not edit_id:
                 self._send_json(400, {"error": "missing id"})
                 return
-            soup = document.load_soup(html_path)
-            ok, result = document.resize_element(
-                soup, edit_id,
-                width=(payload or {}).get("width"),
-                height=(payload or {}).get("height"),
-                max_width=(payload or {}).get("max_width"),
-                max_height=(payload or {}).get("max_height"),
-            )
+            ok, result = self._mutate_document(
+                lambda soup: document.resize_element(
+                    soup, edit_id,
+                    width=(payload or {}).get("width"),
+                    height=(payload or {}).get("height"),
+                    max_width=(payload or {}).get("max_width"),
+                    max_height=(payload or {}).get("max_height"),
+                ))
             if not ok:
                 self._send_result(ok, result)
                 return
-            history.remember()
-            document.save_soup(html_path, soup)
             sys.stderr.write(f"[resize] {edit_id} -> {result['style']!r}\n")
             sys.stderr.flush()
             self._send_json(200, result)
@@ -297,15 +298,13 @@ def make_handler(
                 except (TypeError, ValueError):
                     self._send_json(400, {"error": "target_index must be an integer"})
                     return
-            soup = document.load_soup(html_path)
-            ok, result = document.table_operation(
-                soup, str(cell_id), str(action),
-                target_index=target_index, mode=str(mode))
+            ok, result = self._mutate_document(
+                lambda soup: document.table_operation(
+                    soup, str(cell_id), str(action),
+                    target_index=target_index, mode=str(mode)))
             if not ok:
                 self._send_result(ok, result)
                 return
-            history.remember()
-            document.save_soup(html_path, soup)
             sys.stderr.write(f"[table] {action} at {cell_id}\n")
             sys.stderr.flush()
             self._send_json(200, result)
@@ -315,19 +314,19 @@ def make_handler(
             if not edit_id:
                 self._send_json(400, {"error": "missing id"})
                 return
-            soup = document.load_soup(html_path)
-            ok, result = document.duplicate_element(soup, str(edit_id))
+            ok, result = self._mutate_document(
+                lambda soup: document.duplicate_element(soup, str(edit_id)))
             if not ok:
                 self._send_result(ok, result)
                 return
-            history.remember()
-            document.save_soup(html_path, soup)
             sys.stderr.write(f"[duplicate] {edit_id} -> {result['new_id']}\n")
             sys.stderr.flush()
             self._send_json(200, result)
 
         def _undo(self, _payload):
-            if not history.undo():
+            with mutation_lock:
+                ok = history.undo()
+            if not ok:
                 self._send_json(409, {"error": "nothing to undo"})
                 return
             sys.stderr.write("[history] undo\n")
@@ -335,7 +334,9 @@ def make_handler(
             self._send_json(200, {"ok": True})
 
         def _redo(self, _payload):
-            if not history.redo():
+            with mutation_lock:
+                ok = history.redo()
+            if not ok:
                 self._send_json(409, {"error": "nothing to redo"})
                 return
             sys.stderr.write("[history] redo\n")
