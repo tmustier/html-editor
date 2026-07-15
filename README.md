@@ -122,9 +122,9 @@ Avoid loading two copies of the extension. If you previously copied `html-editor
 
 The legacy shared bridge file `/tmp/html-editor-comments.jsonl` is intentionally unused now — comments are never broadcast to every running Pi session.
 
-### Agent discoverability
+### Explicit Agent Skill invocation
 
-The package also ships an Agent Skill (`skills/html-editor/SKILL.md`). Once installed, Pi-loaded agents see the editor as an option whenever they generate an HTML or SVG document the user is going to iterate on, and they'll launch the server themselves and share the URL with you.
+The package also ships an Agent Skill (`skills/html-editor/SKILL.md`). It is hidden from automatic model invocation so generating an HTML or SVG document does not start an editor unexpectedly. Invoke `/skill:html-editor <path-to-file>` when you want a Pi agent to launch the collaborative editor and share the URL.
 
 ## Run / develop / test
 
