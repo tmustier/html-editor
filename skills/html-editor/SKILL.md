@@ -1,6 +1,7 @@
 ---
 name: html-editor
-description: Make collaborative HTML documents the user can edit and comment on in a local browser. Use when generating an HTML or SVG document, dashboard, report, mockup, slide, one-pager, or anything similar the user will iterate on. Launches a small local editor where they can click-to-edit text, tables, and diagram labels in place, drag to reorder, resize, undo/redo, and leave inline comments that come back here as user messages.
+description: Make collaborative HTML documents the user can edit and comment on in a local browser. Use only when explicitly invoked for an HTML or SVG document, dashboard, report, mockup, slide, or one-pager the user wants to edit interactively.
+disable-model-invocation: true
 ---
 
 # html-editor

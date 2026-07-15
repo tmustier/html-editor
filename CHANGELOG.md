@@ -6,6 +6,10 @@ All notable changes to `html-editor` are documented here. The format follows
 
 ## Unreleased
 
+### Changed
+
+- Disabled automatic model invocation of the bundled Agent Skill. Launch the collaborative editor explicitly with `/skill:html-editor <path-to-file>`.
+
 ## 0.2.1 — 2026-05-18
 
 ### Added
